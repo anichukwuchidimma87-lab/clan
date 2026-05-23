@@ -91,7 +91,9 @@ export default function CheckIn() {
     e.preventDefault();
     setLoading(true);
     
-    // Structured data assembly mirroring the cloud backend schema expectations
+    // ✅ Dynamic API Switch: Uses Vercel configuration variable in production or falls back to localhost locally
+    const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+    
     const attendancePayload = {
       isGuest,
       timestamp: new Date().toISOString(),
@@ -113,8 +115,8 @@ export default function CheckIn() {
     };
 
     try {
-      // Pointed explicitly to your live production server cluster on Render
-      const response = await fetch('https://clan-3slh.onrender.com/api/v1/checkin', {
+      // ✅ Connected to dynamic endpoint URL pipeline securely
+      const response = await fetch(`${API_BASE_URL}/api/v1/checkin`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(attendancePayload)
@@ -133,7 +135,7 @@ export default function CheckIn() {
       }
     } catch (error) {
       console.error('Network Pipeline Error:', error);
-      alert('Could not contact the live cloud server. Please check your internet connectivity.');
+      alert('Could not safely connect to the database pipeline. Please verify network connectivity.');
     } finally {
       setLoading(false);
     }
