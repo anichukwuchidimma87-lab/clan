@@ -9,3 +9,6 @@ app.use(cors({
   credentials: true,
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
+// ... all your express and cors code above ...
+
+export default app; // <--- Ensure this exact line exists at the bottom
