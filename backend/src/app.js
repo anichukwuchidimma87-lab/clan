@@ -1,30 +1,16 @@
 import express from 'express';
 import cors from 'cors';
 import attendanceRoutes from './routes/attendanceRoutes.js';
+import authRoutes from './routes/authRoutes.js'; // 1. Add this import
 
-// 1. DEFINE app FIRST
 const app = express();
 
-// 2. NOW you can use it
 app.use(express.json());
 
-app.use(cors({
-  origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    // or allow any subdomain of vercel.app
-    if (!origin || origin.endsWith('.vercel.app') || origin.includes('localhost:5173')) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  credentials: true,
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
+// ... (your existing CORS configuration) ...
 
-// 3. YOUR ROUTES
+// 2. Mount BOTH sets of routes
 app.use('/api/v1', attendanceRoutes);
+app.use('/api/v1', authRoutes); // This enables /api/v1/login
 
-// 4. FINALLY, EXPORT IT
 export default app;
