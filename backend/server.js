@@ -1,4 +1,5 @@
-import app from './app.js'; // Ensure path is correct
+// server.js (located in the root)
+import app from './src/app.js'; // Ensure the path explicitly says './src/'
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 
@@ -9,16 +10,12 @@ const MONGO_URI = process.env.MONGO_URI;
 
 mongoose.connect(MONGO_URI)
   .then(() => {
-    console.log(`📡 MongoDB Atlas Pipeline Connected Successfully.`);
-    
+    console.log(`📡 MongoDB Atlas Connected.`);
     app.listen(PORT, () => {
-      console.log(`=================================================`);
-      console.log(`🚀 CLAN CORE ENGINE ACTIVE: Listening on Port ${PORT}`);
-      console.log(`=================================================`);
+      console.log(`🚀 Server active on port ${PORT}`);
     });
   })
   .catch((err) => {
-    console.error(`❌ CRITICAL FAILURE: Database connection broken.`);
-    console.error(err);
+    console.error(`❌ Connection failed:`, err);
     process.exit(1);
   });
