@@ -1,12 +1,12 @@
 import mongoose from 'mongoose';
 
 const AttendanceSchema = new mongoose.Schema({
-  isGuest: { type: Boolean, required: true },
+  isGuest: { type: Boolean, default: false },
   fullName: { type: String, required: true },
-  parish: { type: String, required: true },
+  // Linked to our new Parish model
+  parish: { type: mongoose.Schema.Types.ObjectId, ref: 'Parish', required: true },
   role: { type: String, required: true },
   timestamp: { type: Date, default: Date.now }
 }, { timestamps: true });
 
-const Attendance = mongoose.model('Attendance', AttendanceSchema);
-export default Attendance;
+export default mongoose.model('Attendance', AttendanceSchema);
