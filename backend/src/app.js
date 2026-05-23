@@ -9,12 +9,15 @@ const app = express();
 app.use(express.json());
 
 app.use(cors({
-  origin: [
-    'http://localhost:5173',
-    'http://127.0.0.1:5173',
-    'https://clan-omega.vercel.app', 
-    'https://clan-lywmh76ho-chidimma-s-projects.vercel.app'
-  ],
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    // or allow any subdomain of vercel.app
+    if (!origin || origin.endsWith('.vercel.app') || origin.includes('localhost:5173')) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   credentials: true,
   allowedHeaders: ['Content-Type', 'Authorization']
