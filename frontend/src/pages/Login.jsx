@@ -12,21 +12,16 @@ const Login = () => {
     setLoading(true);
 
     const apiBase = import.meta.env.VITE_API_URL;
-    
-    // Corrected URL: Added /auth/ to match app.js route mount
+    // CRITICAL: Ensure /auth/ is added here
     const url = `${apiBase}/api/v1/auth/login`;
-    
-    console.log("Attempting login at:", url);
 
     try {
       const response = await axios.post(url, formData);
       
-      // Store token, role, and auth status
       localStorage.setItem('token', response.data.token);
       localStorage.setItem('role', response.data.role);
       localStorage.setItem('isLoggedIn', 'true');
       
-      // Success: Redirect to dashboard
       navigate('/dashboard');
     } catch (err) {
       console.error("Login Error:", err);
@@ -39,7 +34,6 @@ const Login = () => {
   return (
     <form onSubmit={handleSubmit} className="p-6 max-w-sm mx-auto shadow-md rounded border border-gray-200 mt-10">
       <h2 className="text-xl mb-4 font-bold">Admin Login</h2>
-      
       <input 
         type="email" 
         placeholder="Email" 
@@ -47,7 +41,6 @@ const Login = () => {
         required
         onChange={(e) => setFormData({...formData, email: e.target.value})} 
       />
-      
       <input 
         type="password" 
         placeholder="Password" 
@@ -55,7 +48,6 @@ const Login = () => {
         required
         onChange={(e) => setFormData({...formData, password: e.target.value})} 
       />
-      
       <button 
         type="submit" 
         disabled={loading}
