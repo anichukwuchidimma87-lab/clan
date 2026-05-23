@@ -1,17 +1,29 @@
-import express from 'express';
-const router = express.Router();
+const User = require('../models/User');
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
 
-// Temporary test route to fix the 404/Server error
-router.post('/login', (req, res) => {
-  const { email, password } = req.body;
-  
-  // This is a placeholder. Once you build your User model, 
-  // you will check the database here.
-  if (email === "admin@clan.org" && password === "Password123!") {
-    return res.status(200).json({ name: "Administrator", token: "fake-jwt-token" });
+router.post('/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    const user = await User.findOne({ email });
+
+    if (!user || !(await bcrypt.compare(password, user.password))) {
+      return res.status(401).json({ message: "Invalid credentials" });
+    }
+
+    // Create Token containing ID and Role
+    const token = jwt.sign(
+      { id: user._id, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+
+    res.json({ 
+      name: user.name, 
+      role: user.role, 
+      token 
+    });
+  } catch (err) {
+    res.status(500).json({ message: "Server error" });
   }
-  
-  return res.status(401).json({ message: "Invalid credentials" });
 });
-
-export default router;

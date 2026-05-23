@@ -7,25 +7,20 @@ const Login = () => {
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    try {
-      const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/v1/login`, formData);
-      
-      // 1. Store the user data
-      localStorage.setItem('clanUser', JSON.stringify(response.data));
-      
-      // 2. CRITICAL: Set the flag your ProtectedRoute is looking for
-      localStorage.setItem('isLoggedIn', 'true'); 
-      
-      alert('Login Successful! Welcome, ' + response.data.name);
-      
-      // 3. Navigate to dashboard
-      navigate('/dashboard'); 
-      
-    } catch (err) {
-      alert('Login failed: ' + (err.response?.data?.message || 'Server error'));
-    }
-  };
+  e.preventDefault();
+  try {
+    const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/v1/login`, formData);
+    
+    // Store token and role for auth/UI logic
+    localStorage.setItem('token', response.data.token);
+    localStorage.setItem('role', response.data.role);
+    localStorage.setItem('isLoggedIn', 'true');
+    
+    navigate('/dashboard');
+  } catch (err) {
+    alert('Login failed: ' + (err.response?.data?.message || 'Server error'));
+  }
+};
 
   return (
     <form onSubmit={handleSubmit} className="p-6 max-w-sm mx-auto">
