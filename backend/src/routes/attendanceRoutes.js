@@ -1,6 +1,7 @@
 import express from 'express';
 import { processCheckIn } from '../controllers/attendanceController.js';
 import { protect, authorize } from '../middleware/authMiddleware.js';
+import { deleteAttendance } from '../controllers/attendanceController.js';
 
 
 const router = express.Router();

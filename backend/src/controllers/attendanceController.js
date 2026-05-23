@@ -30,3 +30,14 @@ export const processCheckIn = async (req, res) => {
     return res.status(500).json({ success: false, message: "Failed to log attendance to database" });
   }
 };
+
+// Add this to your attendanceController.js
+export const deleteAttendance = async (req, res) => {
+  try {
+    const { id } = req.params;
+    await Attendance.findByIdAndDelete(id);
+    res.json({ message: 'Attendance record deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ message: 'Error deleting record' });
+  }
+};
