@@ -4,25 +4,29 @@ import { useNavigate } from 'react-router-dom';
 
 const Login = () => {
   const [formData, setFormData] = useState({ email: '', password: '' });
-  const [loading, setLoading] = useState(false); // Added loading state
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    
-    // Debug: Check if the URL is actually being picked up
+
     const apiBase = import.meta.env.VITE_API_URL;
-    console.log("Connecting to:", `${apiBase}/api/v1/login`);
+    
+    // Corrected URL: Added /auth/ to match app.js route mount
+    const url = `${apiBase}/api/v1/auth/login`;
+    
+    console.log("Attempting login at:", url);
 
     try {
-      const response = await axios.post(`${apiBase}/api/v1/login`, formData);
+      const response = await axios.post(url, formData);
       
-      // Store data
+      // Store token, role, and auth status
       localStorage.setItem('token', response.data.token);
       localStorage.setItem('role', response.data.role);
       localStorage.setItem('isLoggedIn', 'true');
       
+      // Success: Redirect to dashboard
       navigate('/dashboard');
     } catch (err) {
       console.error("Login Error:", err);
@@ -33,26 +37,29 @@ const Login = () => {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="p-6 max-w-sm mx-auto">
+    <form onSubmit={handleSubmit} className="p-6 max-w-sm mx-auto shadow-md rounded border border-gray-200 mt-10">
       <h2 className="text-xl mb-4 font-bold">Admin Login</h2>
+      
       <input 
         type="email" 
         placeholder="Email" 
-        className="block w-full p-2 mb-2 border"
+        className="block w-full p-2 mb-2 border rounded"
         required
         onChange={(e) => setFormData({...formData, email: e.target.value})} 
       />
+      
       <input 
         type="password" 
         placeholder="Password" 
-        className="block w-full p-2 mb-4 border"
+        className="block w-full p-2 mb-4 border rounded"
         required
         onChange={(e) => setFormData({...formData, password: e.target.value})} 
       />
+      
       <button 
         type="submit" 
         disabled={loading}
-        className={`p-2 w-full ${loading ? 'bg-gray-400' : 'bg-blue-600'} text-white`}
+        className={`p-2 w-full rounded ${loading ? 'bg-gray-400' : 'bg-blue-600'} text-white transition`}
       >
         {loading ? 'Logging in...' : 'Login'}
       </button>
