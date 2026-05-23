@@ -1,15 +1,10 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import App from './App.jsx'; // Explicit extension to prevent loading errors
+import App from './App.jsx';
+import './index.css'; // Ensure this line exists
 
-const rootElement = document.getElementById('root');
-
-if (!rootElement) {
-  console.error("Failed to find the root element. Make sure id='root' exists in index.html");
-} else {
-  ReactDOM.createRoot(rootElement).render(
-    <React.StrictMode>
-      <App />
-    </React.StrictMode>
-  );
-}
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+);
