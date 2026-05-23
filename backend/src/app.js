@@ -2,31 +2,30 @@ import express from 'express';
 import cors from 'cors';
 import attendanceRoutes from './routes/attendanceRoutes.js';
 import authRoutes from './routes/authRoutes.js';
+import parishRoutes from './routes/parishRoutes.js'; // 1. Import it here
 
 const app = express();
 
 app.use(express.json());
 
-// Optimized CORS configuration to prevent blocking
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow all Vercel domains and Localhost for development
     if (!origin || origin.endsWith('.vercel.app') || origin.includes('localhost:')) {
       callback(null, true);
     } else {
       callback(new Error('Not allowed by CORS'));
     }
   },
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'], // 2. Added PATCH for updates
   credentials: true,
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-// Ensure we handle Preflight OPTIONS requests
 app.options('*', cors());
 
 // Mount Routes
-app.use('/api/v1', attendanceRoutes);
-app.use('/api/v1', authRoutes);
+app.use('/api/v1/attendance', attendanceRoutes);
+app.use('/api/v1/auth', authRoutes);
+app.use('/api/v1/parishes', parishRoutes); // 3. Mount it here
 
 export default app;

@@ -1,11 +1,11 @@
-import app from './src/app.js';
+import app from './app.js'; // Ensure path is correct
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
 const PORT = process.env.PORT || 5000;
-const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/clan_attendance';
+const MONGO_URI = process.env.MONGO_URI;
 
 mongoose.connect(MONGO_URI)
   .then(() => {
