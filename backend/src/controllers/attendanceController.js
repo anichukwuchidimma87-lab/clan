@@ -3,15 +3,10 @@ import Attendance from '../models/Attendance.js';
 export const processCheckIn = async (req, res) => {
   try {
     const { isGuest, details } = req.body;
-
     if (!details || !details.fullName || !details.parish || !details.role) {
-      return res.status(400).json({
-        success: false,
-        message: 'Processing failure: Missing essential registration parameters.'
-      });
+      return res.status(400).json({ success: false, message: 'Missing essential registration parameters.' });
     }
     
-    // Create a database record based on the payload details
     const newRecord = new Attendance({
       isGuest: isGuest,
       fullName: details.fullName,
@@ -20,24 +15,29 @@ export const processCheckIn = async (req, res) => {
     });
 
     await newRecord.save();
-
-    return res.status(200).json({ 
-      success: true, 
-      message: `Attendance cleanly recorded for ${details.fullName}!` 
-    });
+    return res.status(200).json({ success: true, message: `Attendance recorded for ${details.fullName}!` });
   } catch (error) {
     console.error("Database Save Error:", error);
     return res.status(500).json({ success: false, message: "Failed to log attendance to database" });
   }
 };
 
-// Add this to your attendanceController.js
+// Function to fetch all records for the registry dashboard
+export const getAttendance = async (req, res) => {
+  try {
+    const records = await Attendance.find({});
+    res.status(200).json({ success: true, data: records });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Error fetching registry records' });
+  }
+};
+
 export const deleteAttendance = async (req, res) => {
   try {
     const { id } = req.params;
     await Attendance.findByIdAndDelete(id);
-    res.json({ message: 'Attendance record deleted successfully' });
+    res.status(200).json({ success: true, message: 'Record deleted successfully' });
   } catch (error) {
-    res.status(500).json({ message: 'Error deleting record' });
+    res.status(500).json({ success: false, message: 'Error deleting record' });
   }
 };

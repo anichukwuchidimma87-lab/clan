@@ -1,17 +1,14 @@
 import express from 'express';
-import { processCheckIn } from '../controllers/attendanceController.js';
+import { processCheckIn, deleteAttendance, getAttendance } from '../controllers/attendanceController.js';
 import { protect, authorize } from '../middleware/authMiddleware.js';
-import { deleteAttendance } from '../controllers/attendanceController.js';
-
 
 const router = express.Router();
-// Only IT Admins can delete records
-router.delete('/attendance/:id', protect, authorize('IT_ADMIN'), deleteAttendance);
 
-// Secretaries and IT Admins can view the registry
-router.get('/attendance', protect, authorize('IT_ADMIN', 'SECRETARY'), getAttendance);
-
-
+// Routes
 router.post('/checkin', processCheckIn);
+
+// Protected routes (Only IT_ADMIN or SECRETARY can access)
+router.get('/attendance', protect, authorize('IT_ADMIN', 'SECRETARY'), getAttendance);
+router.delete('/attendance/:id', protect, authorize('IT_ADMIN'), deleteAttendance);
 
 export default router;
