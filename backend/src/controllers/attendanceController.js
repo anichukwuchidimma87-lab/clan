@@ -2,30 +2,43 @@ import Attendance from '../models/Attendance.js';
 
 export const processCheckIn = async (req, res) => {
   try {
-    const { isGuest, details } = req.body;
-    if (!details || !details.fullName || !details.parish || !details.role) {
-      return res.status(400).json({ success: false, message: 'Missing essential registration parameters.' });
+    // We now expect the payload to include 'hierarchy' directly
+    const { isGuest, fullName, role, hierarchy } = req.body;
+
+    // Validate essential parameters
+    if (!fullName || !role || !hierarchy || !hierarchy.parish) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Missing essential registration parameters (Name, Role, or Parish).' 
+      });
     }
     
     const newRecord = new Attendance({
-      isGuest: isGuest,
-      fullName: details.fullName,
-      parish: details.parish,
-      role: details.role
+      isGuest,
+      fullName,
+      role,
+      hierarchy // Saving the nested section/parish object
     });
 
     await newRecord.save();
-    return res.status(200).json({ success: true, message: `Attendance recorded for ${details.fullName}!` });
+    return res.status(200).json({ 
+      success: true, 
+      message: `Attendance recorded for ${fullName}!` 
+    });
   } catch (error) {
     console.error("Database Save Error:", error);
-    return res.status(500).json({ success: false, message: "Failed to log attendance to database" });
+    return res.status(500).json({ 
+      success: false, 
+      message: "Failed to log attendance to database" 
+    });
   }
 };
 
-// Function to fetch all records for the registry dashboard
+// getAttendance and deleteAttendance remain the same, 
+// but will now return the new 'hierarchy' field in your dashboard results!
 export const getAttendance = async (req, res) => {
   try {
-    const records = await Attendance.find({});
+    const records = await Attendance.find({}).sort({ createdAt: -1 });
     res.status(200).json({ success: true, data: records });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Error fetching registry records' });
