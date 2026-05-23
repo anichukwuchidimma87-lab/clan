@@ -91,6 +91,7 @@ export default function CheckIn() {
     e.preventDefault();
     setLoading(true);
     
+    // Structured data assembly mirroring the cloud backend schema expectations
     const attendancePayload = {
       isGuest,
       timestamp: new Date().toISOString(),
@@ -112,7 +113,8 @@ export default function CheckIn() {
     };
 
     try {
-      const response = await fetch('http://localhost:5000/api/v1/checkin', {
+      // Pointed explicitly to your live production server cluster on Render
+      const response = await fetch('https://clan-3slh.onrender.com/api/v1/checkin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(attendancePayload)
@@ -131,7 +133,7 @@ export default function CheckIn() {
       }
     } catch (error) {
       console.error('Network Pipeline Error:', error);
-      alert('Could not contact the backend server. Is your Express engine active on port 5000?');
+      alert('Could not contact the live cloud server. Please check your internet connectivity.');
     } finally {
       setLoading(false);
     }
@@ -287,7 +289,7 @@ export default function CheckIn() {
                 </select>
               </div>
               
-              {/* ✅ UPGRADED: Structured Select Dropdown for Position in Parish */}
+              {/* Structured Select Dropdown for Position in Parish */}
               <div>
                 <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">Position in Parish</label>
                 <select
