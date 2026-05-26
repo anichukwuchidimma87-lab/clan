@@ -1,22 +1,54 @@
 import Lector from '../models/Lector.js';
-import FinanceKey from '../models/Finance.js'; // Fallback path mapping or ledger source if needed
+import Parish from '../models/Parish.js'; // Points to your unified, original Parish model
 
 // HELPER PUBLIC ENDPOINT: Feed drop-down options safely from real administrative datasets
 export const getActiveParishList = async (req, res) => {
   try {
-    // Collect all existing unique parishes running in the financial ledger matrix setup
-    const ledgerParishes = await FinanceKey.find({}, 'parishName deanery');
+    // Pull clean approved rows directly out of your actual Parish collection using your exact schema keys
+    const approvedParishes = await Parish.find({}, 'name zone').sort({ name: 1 });
     
-    // Format them out uniquely
-    const structuralMap = ledgerParishes.map(p => ({
-      name: p.parishName,
-      deanery: p.deanery || 'Benin'
+    // Format them out so the frontend dropdown logic receives consistent property names
+    const formattedData = approvedParishes.map(p => ({
+      name: p.name,       // Maps your schema 'name' to frontend option label
+      deanery: p.zone     // Maps your schema 'zone' to frontend deanery filter
     }));
     
-    // Filter duplicates out dynamically
-    const uniqueParishes = Array.from(new Map(structuralMap.map(item => [item.name, item])).values());
-    
-    res.status(200).json({ success: true, data: uniqueParishes });
+    res.status(200).json({ success: true, data: formattedData });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// EXCEL BULK UPLOAD ENGINE FOR MASTER PARISHES
+export const bulkUploadParishes = async (req, res) => {
+  try {
+    const { records } = req.body; // Array of { parishName, deanery } from frontend Excel reader
+    if (!records || records.length === 0) {
+      return res.status(400).json({ success: false, message: "No records detected." });
+    }
+
+    let insertCount = 0;
+
+    for (const item of records) {
+      if (!item.parishName) continue;
+      
+      // Look up using your original schema key field 'name'
+      const exists = await Parish.findOne({ name: item.parishName.trim() });
+      
+      // If the church isn't in your ledger/registry system yet, create it safely without touching others
+      if (!exists) {
+        await Parish.create({
+          name: item.parishName.trim(),
+          zone: item.deanery || 'Benin' // Maps uploaded deanery data to your 'zone' database key
+        });
+        insertCount++;
+      }
+    }
+
+    res.status(200).json({ 
+      success: true, 
+      message: `Successfully processed list. Inserted ${insertCount} new parishes into the shared registry database.` 
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -48,7 +80,7 @@ export const publicCheckIn = async (req, res) => {
       ageBracket,
       yearCommissioned: Number(yearCommissioned),
       employmentStatus,
-      deanery,
+      deanery,              // Stored as 'Benin', 'Abudu', or 'Eguabazua' on the individual member's card
       parishName: parishName.trim(),
       roleInParish: roleInParish || 'Active Member'
     });
@@ -109,6 +141,7 @@ export const updateLector = async (req, res) => {
   }
 };
 
+// REMOVE INDIVIDUAL MEMBER PROFILE DATA RECORD
 export const deleteLector = async (req, res) => {
   try {
     const { id } = req.params;
