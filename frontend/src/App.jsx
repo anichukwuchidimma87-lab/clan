@@ -3,19 +3,26 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import FinancialLedger from './pages/FinancialLedger';
-import CheckIn from './pages/CheckIn'; // Your existing check-in form component
+import CheckIn from './pages/CheckIn'; // Public submission form
+import Registry from './pages/Registry'; // New secure management panel
 
 function App() {
   return (
     <Router>
       <Routes>
+        {/* Authentication Routes */}
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        
+        {/* Core Executive & Admin Hub */}
         <Route path="/dashboard" element={<Dashboard />} />
         
-        {/* New Route Segregations */}
+        {/* Financial Module */}
         <Route path="/ledger" element={<FinancialLedger />} />
-        <Route path="/registry" element={<CheckIn />} />
+        
+        {/* Roster & Registry Database Segregations */}
+        <Route path="/checkin" element={<CheckIn />} />   {/* PUBLIC LINK: Send this to all parishes */}
+        <Route path="/registry" element={<Registry />} /> {/* SECURE DASHBOARD: Behind the login wall */}
       </Routes>
     </Router>
   );
