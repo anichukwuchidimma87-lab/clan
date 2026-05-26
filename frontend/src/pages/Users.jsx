@@ -6,7 +6,6 @@ export default function Users() {
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState({ text: '', isError: false });
 
-  // Function to fetch pending users
   const fetchPending = async () => {
     try {
       const token = localStorage.getItem('clan_token');
@@ -17,13 +16,16 @@ export default function Users() {
       });
       setPendingUsers(res.data);
     } catch (err) {
-      setMessage({ text: "Failed to load pending requests.", isError: true });
+      // Differentiate between generic error and permission error
+      const errorMsg = err.response?.status === 403 
+        ? "Access Denied: You do not have approval privileges." 
+        : "Failed to load pending requests.";
+      setMessage({ text: errorMsg, isError: true });
     } finally {
       setLoading(false);
     }
   };
 
-  // Function to approve a user
   const approveUser = async (id) => {
     try {
       const token = localStorage.getItem('clan_token');
@@ -33,11 +35,10 @@ export default function Users() {
         headers: { Authorization: `Bearer ${token}` }
       });
       
-      // Remove approved user from local state immediately
       setPendingUsers(pendingUsers.filter(user => user._id !== id));
       setMessage({ text: "User approved successfully.", isError: false });
     } catch (err) {
-      setMessage({ text: "Approval failed. Check permissions.", isError: true });
+      setMessage({ text: "Approval failed. You may lack sufficient clearance.", isError: true });
     }
   };
 
@@ -57,7 +58,7 @@ export default function Users() {
 
       {loading ? (
         <p className="text-gray-500">Loading pending accounts...</p>
-      ) : pendingUsers.length === 0 ? (
+      ) : pendingUsers.length === 0 && !message.isError ? (
         <div className="text-center p-10 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200">
           <p className="text-gray-400 font-bold">No pending registrations found.</p>
         </div>

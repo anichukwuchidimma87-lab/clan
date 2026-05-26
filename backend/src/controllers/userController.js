@@ -6,6 +6,7 @@ export const getPendingUsers = async (req, res) => {
     const pendingUsers = await User.find({ status: 'pending' }).select('-password');
     res.json(pendingUsers);
   } catch (error) {
+    console.error("Error fetching pending users:", error);
     res.status(500).json({ message: 'Error fetching pending users' });
   }
 };
@@ -14,13 +15,22 @@ export const getPendingUsers = async (req, res) => {
 export const approveUser = async (req, res) => {
   try {
     const user = await User.findById(req.params.id);
-    if (!user) return res.status(404).json({ message: 'User not found' });
+    
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Logic Check: Only proceed if the user is currently pending
+    if (user.status === 'approved') {
+      return res.status(400).json({ message: 'User is already approved' });
+    }
     
     user.status = 'approved';
     await user.save();
     
     res.json({ message: 'User account approved successfully', user });
   } catch (error) {
+    console.error("Error approving user:", error);
     res.status(500).json({ message: 'Server error' });
   }
 };

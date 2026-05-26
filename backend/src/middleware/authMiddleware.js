@@ -1,5 +1,5 @@
 import jwt from 'jsonwebtoken';
-import User from '../models/User.js'; // Assuming you have your User model
+import User from '../models/User.js';
 
 // 1. Protect: Validates the token and fetches the user from DB
 export const protect = async (req, res, next) => {
@@ -16,7 +16,7 @@ export const protect = async (req, res, next) => {
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    // Fetch user from DB to ensure they still exist and check current role
+    // Fetch user from DB to ensure they still exist and check current role/position
     req.user = await User.findById(decoded.id).select('-password');
     
     if (!req.user) {
@@ -25,7 +25,7 @@ export const protect = async (req, res, next) => {
 
     next();
   } catch (error) {
-    console.error(error);
+    console.error("Auth Middleware Error:", error);
     res.status(401).json({ message: 'Not authorized, token failed' });
   }
 };
@@ -33,17 +33,14 @@ export const protect = async (req, res, next) => {
 // 2. Authorize: Role-based check with Super Admin override
 export const authorize = (...allowedRoles) => {
   return (req, res, next) => {
-    // Check if user exists
     if (!req.user) {
       return res.status(401).json({ message: 'Authentication required' });
     }
 
-    // SUPER ADMIN OVERRIDE: If role is superadmin, skip all checks
     if (req.user.role === 'superadmin') {
       return next();
     }
 
-    // Standard role check
     if (!allowedRoles.includes(req.user.role)) {
       return res.status(403).json({ 
         message: `Role ${req.user.role} is not authorized to access this route` 
@@ -54,15 +51,19 @@ export const authorize = (...allowedRoles) => {
   };
 };
 
-// New middleware for approval rights
+// 3. Updated Approval Middleware
 export const authorizeApproval = (req, res, next) => {
   const gatekeeperPositions = ['President', 'Vice President', 'Secretary', 'Assistant Secretary'];
   
+  // Safe navigation: default to empty string if position is missing
+  const userPosition = req.user.position || '';
+  
   const isSuperAdmin = req.user.role === 'superadmin';
-  const isGatekeeper = req.user.role === 'admin' && gatekeeperPositions.includes(req.user.position);
+  const isGatekeeper = req.user.role === 'admin' && gatekeeperPositions.includes(userPosition);
 
   if (isSuperAdmin || isGatekeeper) {
     return next();
   }
+  
   return res.status(403).json({ message: 'Not authorized to approve users.' });
 };
