@@ -53,3 +53,16 @@ export const authorize = (...allowedRoles) => {
     next();
   };
 };
+
+// New middleware for approval rights
+export const authorizeApproval = (req, res, next) => {
+  const gatekeeperPositions = ['President', 'Vice President', 'Secretary', 'Assistant Secretary'];
+  
+  const isSuperAdmin = req.user.role === 'superadmin';
+  const isGatekeeper = req.user.role === 'admin' && gatekeeperPositions.includes(req.user.position);
+
+  if (isSuperAdmin || isGatekeeper) {
+    return next();
+  }
+  return res.status(403).json({ message: 'Not authorized to approve users.' });
+};

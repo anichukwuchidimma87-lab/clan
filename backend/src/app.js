@@ -5,6 +5,7 @@ import authRoutes from './routes/authRoutes.js';
 import parishRoutes from './routes/parishRoutes.js'; 
 import financeRoutes from './routes/financeRoutes.js';
 import lectorRoutes from './routes/lectorRoutes.js'; // 1. Imported your lector routes file
+import userRoutes from './routes/userRoutes.js';
 
 const app = express();
 
@@ -30,6 +31,7 @@ app.use('/api/v1/attendance', attendanceRoutes);
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/parishes', parishRoutes); 
 app.use('/api/finance', financeRoutes);
+app.use('/api/users', userRoutes);
 
 // 2. Mounted your lector routes so the URLs match your frontend perfectly!
 app.use('/api/lectors', lectorRoutes);

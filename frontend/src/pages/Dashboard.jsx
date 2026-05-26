@@ -22,6 +22,13 @@ const RestrictedSidebar = ({ isVisible, userRole, navigate }) => {
         {isAdmin && (
           <NavLink to="/admin/control" className={({ isActive }) => `flex items-center gap-3 p-3 rounded-lg font-semibold text-xs ${isActive ? 'bg-indigo-600 text-white' : 'hover:bg-indigo-700'}`}>🛠️ Admin Controls</NavLink>
         )}
+
+        // Add this inside your RestrictedSidebar component
+        {canApprove && (
+          <NavLink to="/users" className="flex items-center gap-3 p-3 rounded-lg font-semibold text-xs hover:bg-indigo-700">
+            👥 Manage User Access
+          </NavLink>
+        )}
       </nav>
 
       <div className="border-t border-indigo-800 pt-4 mt-4 space-y-2">

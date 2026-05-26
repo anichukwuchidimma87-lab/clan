@@ -10,22 +10,27 @@ const generateToken = (id, role) => {
 
 export const loginUser = async (req, res) => {
   const { email, password } = req.body;
-
   try {
     const user = await User.findOne({ email });
-
-    // In a real app, use bcrypt.compare() to check hashed passwords
     if (user && (await user.matchPassword(password))) {
-      res.json({
-        _id: user._id,
-        name: user.name,
-        role: user.role,
-        token: generateToken(user._id, user.role),
-      });
+      // THE GATE: Block access if status is pending
+      if (user.status !== 'approved') {
+        return res.status(403).json({ message: 'Account awaiting Deanery approval.' });
+      }
+      res.json({ /* ... your existing response ... */ });
     } else {
-      res.status(401).json({ message: 'Invalid email or password' });
+      res.status(401).json({ message: 'Invalid credentials' });
     }
-  } catch (error) {
-    res.status(500).json({ message: 'Server error' });
-  }
+  } catch (error) { res.status(500).json({ message: 'Server error' }); }
+};
+
+export const approveUser = async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    
+    user.status = 'approved';
+    await user.save();
+    res.json({ message: 'User approved successfully' });
+  } catch (error) { res.status(500).json({ message: 'Server error' }); }
 };

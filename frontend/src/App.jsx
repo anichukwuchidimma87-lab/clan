@@ -5,6 +5,7 @@ import Dashboard from './pages/Dashboard';
 import FinancialLedger from './pages/FinancialLedger';
 import CheckIn from './pages/CheckIn'; // Public submission form
 import Registry from './pages/Registry'; // New secure management panel
+import Users from './pages/Users';
 
 function App() {
   return (
@@ -23,6 +24,7 @@ function App() {
         {/* Roster & Registry Database Segregations */}
         <Route path="/checkin" element={<CheckIn />} />   {/* PUBLIC LINK: Send this to all parishes */}
         <Route path="/registry" element={<Registry />} /> {/* SECURE DASHBOARD: Behind the login wall */}
+        <Route path="/users" element={<Users />} /> {/* USER ACCESS MANAGEMENT: For approving new users */}
       </Routes>
     </Router>
   );
