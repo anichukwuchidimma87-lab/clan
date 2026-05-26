@@ -1,17 +1,27 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 export default function Dashboard() {
   const [ledger, setLedger] = useState([]);
   const [totals, setTotals] = useState({ dues: 0, seminar: 0, competition: 0, grandTotal: 0 });
   const [selectedZone, setSelectedZone] = useState('All');
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
 
   const fetchLedgerData = async () => {
     try {
       const token = localStorage.getItem('clan_token');
+      
+      // Safety Check: If no token exists, send them back to login page
+      if (!token) {
+        navigate('/login');
+        return;
+      }
+
       const res = await fetch('https://clan-3slh.onrender.com/api/finance/ledger', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
+      
       const result = await res.json();
       if (result.success) {
         setLedger(result.data);
@@ -31,6 +41,8 @@ export default function Dashboard() {
   const handleToggle = async (id, field, currentValue) => {
     try {
       const token = localStorage.getItem('clan_token');
+      if (!token) return;
+
       const record = ledger.find(item => item._id === id);
       
       const updatedPayload = {
@@ -50,7 +62,7 @@ export default function Dashboard() {
       });
       
       if (res.ok) {
-        fetchLedgerData(); // Refresh metrics instantly on successful save
+        fetchLedgerData(); 
       }
     } catch (err) {
       console.error("Failed to update record on live database:", err);

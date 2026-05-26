@@ -12,13 +12,13 @@ const Login = () => {
     setLoading(true);
 
     const apiBase = import.meta.env.VITE_API_URL;
-    // CRITICAL: Ensure /auth/ is added here
     const url = `${apiBase}/api/v1/auth/login`;
 
     try {
       const response = await axios.post(url, formData);
       
-      localStorage.setItem('token', response.data.token);
+      // FIXED: Saving key as 'clan_token' to match what your dashboard looks for
+      localStorage.setItem('clan_token', response.data.token);
       localStorage.setItem('role', response.data.role);
       localStorage.setItem('isLoggedIn', 'true');
       
