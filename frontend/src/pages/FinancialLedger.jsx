@@ -6,9 +6,9 @@ export default function FinancialLedger() {
   const [ledger, setLedger] = useState([]);
   const [totals, setTotals] = useState({ dues: 0, seminar: 0, competition: 0, grandTotal: 0 });
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
-  const [userRole, setUserRole] = useState('member'); // Safety default
+  const [userRole, setUserRole] = useState('member');
   
-  // Custom manual form structures hooks
+  // Manual Single Input Forms
   const [newParishName, setNewParishName] = useState('');
   const [newParishDeanery, setNewParishDeanery] = useState('');
   const [formYear, setFormYear] = useState(new Date().getFullYear());
@@ -16,13 +16,16 @@ export default function FinancialLedger() {
   const [formSeminar, setFormSeminar] = useState(2500);
   const [formComp, setFormComp] = useState(5000);
 
-  // Installment inline inputs state dictionary maps
-  const [payAmounts, setPayAmounts] = useState({});
+  // Excel Bulk Upload States
+  const [excelYear, setExcelYear] = useState(new Date().getFullYear());
   const [uploading, setUploading] = useState(false);
+
+  // Partial Payment Form States
+  const [payAmounts, setPayAmounts] = useState({});
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
-  // Simple token decoder helper script routine
+  // Token decode verification script routine
   const parseJwt = (token) => {
     try { return JSON.parse(atob(token.split('.')[1])); } catch (e) { return null; }
   };
@@ -40,13 +43,14 @@ export default function FinancialLedger() {
       const res = await fetch(`https://clan-3slh.onrender.com/api/finance/ledger?year=${year}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
+      
       const result = await res.json();
       if (result.success) {
         setLedger(result.data);
         setTotals(result.totals);
       }
     } catch (err) {
-      console.error(err);
+      console.error("Error connecting to live ledger API:", err);
     } finally {
       setLoading(false);
     }
@@ -55,6 +59,111 @@ export default function FinancialLedger() {
   useEffect(() => {
     fetchLedgerData(currentYear);
   }, [currentYear]);
+
+  // FEATURE RESTORED: Full Excel Sheet Client-side Parsing
+  const handleExcelUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setUploading(true);
+    const reader = new FileReader();
+
+    reader.onload = async (evt) => {
+      try {
+        const data = evt.target.result;
+        const workbook = XLSX.read(data, { type: 'binary' });
+        const sheetName = workbook.SheetNames[0];
+        const sheet = workbook.Sheets[sheetName];
+        
+        const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+        const records = [];
+
+        for (let i = 1; i < rows.length; i++) {
+          const row = rows[i];
+          if (!row[0]) continue; 
+
+          records.push({
+            parishName: String(row[0]).trim(),
+            deanery: row[1] ? String(row[1]).trim() : "",
+            year: Number(excelYear),
+            duesPrice: row[2] ? Number(row[2]) : 5000,
+            seminarPrice: row[3] ? Number(row[3]) : 2500,
+            competitionPrice: row[4] ? Number(row[4]) : 5000,
+            duesPaidAmount: row[5] ? Number(row[5]) : 0,
+            seminarPaidAmount: row[6] ? Number(row[6]) : 0,
+            competitionPaidAmount: row[7] ? Number(row[7]) : 0
+          });
+        }
+
+        if (records.length === 0) {
+          alert("No valid rows detected in spreadsheet.");
+          setUploading(false);
+          return;
+        }
+
+        const token = localStorage.getItem('clan_token');
+        const res = await fetch('https://clan-3slh.onrender.com/api/finance/bulk-upload', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ records })
+        });
+
+        const result = await res.json();
+        if (result.success) {
+          alert(`Success! Bulk imported ${records.length} parish records.`);
+          setCurrentYear(Number(excelYear));
+          e.target.value = ''; 
+        } else {
+          alert(result.message || 'Error executing server import transaction.');
+        }
+      } catch (err) {
+        console.error("Excel upload crash:", err);
+        alert("Failed to read Excel workbook layout.");
+      } finally {
+        setUploading(false);
+      }
+    };
+    reader.readAsBinaryString(file);
+  };
+
+  // FEATURE RESTORED: Manual Single Parish Addition Form Execution
+  const handleManualAdd = async (e) => {
+    e.preventDefault();
+    if (!newParishName.trim()) return;
+
+    try {
+      const token = localStorage.getItem('clan_token');
+      const res = await fetch('https://clan-3slh.onrender.com/api/finance/parish', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ 
+          parishName: newParishName, 
+          deanery: newParishDeanery,
+          year: formYear,
+          duesPrice: formDues,
+          seminarPrice: formSeminar,
+          competitionPrice: formComp
+        })
+      });
+
+      const result = await res.json();
+      if (result.success) {
+        setNewParishName('');
+        setNewParishDeanery('');
+        setCurrentYear(Number(formYear));
+      } else {
+        alert(result.message);
+      }
+    } catch (err) {
+      console.error("Manual saving error:", err);
+    }
+  };
 
   const handlePostPayment = async (id, category) => {
     const key = `${id}-${category}`;
@@ -80,66 +189,106 @@ export default function FinancialLedger() {
 
   const isAdmin = userRole === 'admin' || userRole === 'superadmin';
 
-  if (loading) return <div className="p-8 text-center text-sm font-semibold text-gray-500">Verifying Ledger Authorization Parameters...</div>;
+  if (loading) return <div className="p-8 text-center text-sm font-semibold text-gray-500">Loading Active Ledger Core System...</div>;
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6 bg-gray-50 min-h-screen">
       <button onClick={() => navigate('/dashboard')} className="text-sm font-bold text-indigo-600 hover:underline">← Back to Dashboard Hub Portal</button>
       
+      {/* Top Controls Banner */}
       <div className="bg-white p-4 rounded-xl shadow-sm flex flex-wrap justify-between items-center gap-4">
         <div>
-          <h1 className="text-2xl font-black text-gray-800">Financial Ledger Matrix</h1>
-          <p className="text-xs text-gray-400">Security Clearance Level: <span className="font-mono uppercase font-bold text-indigo-600">{userRole}</span></p>
+          <h1 className="text-2xl font-black text-gray-800">Deanery Financial Ledger</h1>
+          <p className="text-xs text-gray-400">Security Access Tier: <span className="font-mono uppercase font-black text-indigo-600">{userRole}</span></p>
         </div>
         <div className="flex items-center gap-2">
           <label className="text-sm font-bold text-gray-600">Operating Sheet Year:</label>
-          <input type="number" className="border p-2 rounded-lg text-sm w-24 font-bold text-center bg-gray-50" value={currentYear} onChange={(e) => setCurrentYear(Number(e.target.value))} />
+          <input 
+            type="number" 
+            className="border p-2 rounded-lg text-sm w-24 font-bold text-center bg-gray-50" 
+            value={currentYear} 
+            onChange={(e) => setCurrentYear(Number(e.target.value))} 
+          />
         </div>
       </div>
 
-      {/* Analytics Metric Blocks Summary Row */}
+      {/* Metrics Layout Tally Row */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-white p-4 rounded-xl shadow-sm border-l-4 border-blue-600">
-          <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Dues Deposited</p>
+          <p className="text-xs text-gray-400 font-bold uppercase">Total Dues Deposited</p>
           <p className="text-xl font-extrabold text-gray-900">₦{totals.dues.toLocaleString()}</p>
         </div>
         <div className="bg-white p-4 rounded-xl shadow-sm border-l-4 border-purple-600">
-          <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Seminar Revenue</p>
+          <p className="text-xs text-gray-400 font-bold uppercase">Total Seminar Revenue</p>
           <p className="text-xl font-extrabold text-gray-900">₦{totals.seminar.toLocaleString()}</p>
         </div>
         <div className="bg-white p-4 rounded-xl shadow-sm border-l-4 border-pink-600">
-          <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Comp Collections</p>
+          <p className="text-xs text-gray-400 font-bold uppercase">Total Comp Collections</p>
           <p className="text-xl font-extrabold text-gray-900">₦{totals.competition.toLocaleString()}</p>
         </div>
         <div className="bg-indigo-950 text-white p-4 rounded-xl shadow-sm">
-          <p className="text-xs opacity-70 font-bold uppercase tracking-wider">TOTAL BANK ({currentYear})</p>
+          <p className="text-xs opacity-70 font-bold uppercase">GRAND YEAR TOTAL ({currentYear})</p>
           <p className="text-2xl font-black">₦{totals.grandTotal.toLocaleString()}</p>
         </div>
       </div>
 
-      {/* ADMIN CONTROL FORMS PANELS (Invisible to standard members) */}
+      {/* ADMIN LEVEL MANAGEMENT PANELS (Completely hidden from basic members) */}
       {isAdmin && (
         <div className="space-y-4 animate-fadeIn">
-          {/* Manual Entry Inputs Form */}
+          
+          {/* EXCEL SHEET BLOCK INTEGRATION RENDERED PERFECTLY */}
+          <div className="bg-white p-5 rounded-xl shadow-sm border border-green-200 bg-emerald-50/10">
+            <h3 className="text-md font-bold text-emerald-900 mb-1 flex items-center gap-2">📊 Excel Spreadsheet Import Panel</h3>
+            <p className="text-xs text-gray-500 mb-4">
+              Columns sequence blueprint mapping requirement structure: <b>Parish Name | Deanery | Dues Price | Seminar Price | Comp Price | Dues Paid Amt | Seminar Paid Amt | Comp Paid Amt</b>
+            </p>
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-gray-600">Assign Ledger Year:</span>
+                <input type="number" className="border p-2 rounded-lg text-sm font-semibold w-24 bg-white" value={excelYear} onChange={(e) => setExcelYear(e.target.value)} disabled={uploading} />
+              </div>
+              <input type="file" accept=".xlsx, .xls" className="text-xs text-gray-600 cursor-pointer file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:bg-emerald-100 file:text-emerald-700" onChange={handleExcelUpload} disabled={uploading} />
+              {uploading && <span className="text-xs text-emerald-600 font-bold animate-pulse">Parsing and Saving Excel Dataset File...</span>}
+            </div>
+          </div>
+
+          {/* SINGLE MANUAL FORM BLOCK INTEGRATION RENDERED PERFECTLY */}
           <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-200">
             <h3 className="text-sm font-black text-gray-800 uppercase tracking-wider mb-3">Add Single Parish Setup Profile</h3>
-            <form onSubmit={async (e) => { e.preventDefault(); /* standard single record generator logic link placeholder */ }} className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-6 gap-3">
-              <input type="text" placeholder="Parish Name" className="border p-2 rounded-lg text-sm md:col-span-2" value={newParishName} onChange={(e) => setNewParishName(e.target.value)} required />
-              <select className="border p-2 rounded-lg text-sm bg-white" value={newParishDeanery} onChange={(e) => setNewParishDeanery(e.target.value)}>
-                <option value="">Select Deanery</option>
-                <option value="Benin">Benin</option>
-                <option value="Abudu">Abudu</option>
-                <option value="Eguabazua">Eguabazua</option>
-              </select>
-              <input type="number" className="border p-2 rounded-lg text-sm" value={formYear} onChange={(e) => setFormYear(Number(e.target.value))} required />
-              <input type="number" className="border p-2 rounded-lg text-sm" value={formDues} onChange={(e) => setFormDues(Number(e.target.value))} required />
-              <button type="submit" className="bg-blue-600 text-white text-xs font-bold rounded-lg md:col-span-2 hover:bg-blue-700 transition">Save Roster Line</button>
+            <form onSubmit={handleManualAdd} className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-6 gap-3">
+              <div className="md:col-span-2">
+                <input type="text" placeholder="Parish Name" className="border p-2 rounded-lg text-sm w-full" value={newParishName} onChange={(e) => setNewParishName(e.target.value)} required />
+              </div>
+              <div>
+                <select className="border p-2 rounded-lg text-sm w-full bg-white" value={newParishDeanery} onChange={(e) => setNewParishDeanery(e.target.value)}>
+                  <option value="">Select Deanery</option>
+                  <option value="Benin">Benin</option>
+                  <option value="Abudu">Abudu</option>
+                  <option value="Eguabazua">Eguabazua</option>
+                </select>
+              </div>
+              <div>
+                <input type="number" placeholder="Year" className="border p-2 rounded-lg text-sm w-full" value={formYear} onChange={(e) => setFormYear(Number(e.target.value))} required />
+              </div>
+              <div>
+                <input type="number" placeholder="Dues Fee" className="border p-2 rounded-lg text-sm w-full" value={formDues} onChange={(e) => setFormDues(Number(e.target.value))} required />
+              </div>
+              <div>
+                <input type="number" placeholder="Seminar Fee" className="border p-2 rounded-lg text-sm w-full" value={formSeminar} onChange={(e) => setFormSeminar(Number(e.target.value))} required />
+              </div>
+              <div className="md:col-span-2">
+                <input type="number" placeholder="Competition Fee" className="border p-2 rounded-lg text-sm w-full" value={formComp} onChange={(e) => setFormComp(Number(e.target.value))} required />
+              </div>
+              <div className="md:col-span-4">
+                <button type="submit" className="bg-blue-600 text-white text-xs font-bold rounded-lg w-full py-2.5 hover:bg-blue-700 transition shadow-sm h-[38px]">+ Save Individual Parish Sheet Line</button>
+              </div>
             </form>
           </div>
+
         </div>
       )}
 
-      {/* Main Ledger Sheet Output Grid Display */}
+      {/* Roster Ledger Table Sheet Matrix Output Displays */}
       <div className="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100">
         <table className="w-full text-left border-collapse">
           <thead>
@@ -170,12 +319,12 @@ export default function FinancialLedger() {
                           <span className="inline-block bg-green-100 text-green-700 px-1.5 py-0.5 rounded text-[10px] font-bold">Cleared ✓</span>
                         )}
                         
-                        {/* Inline Installment Adder Form - Only visible to Admins */}
+                        {/* Installment input block - Admin Exclusive */}
                         {isAdmin && balance > 0 && (
                           <div className="flex items-center gap-1 mt-2 justify-center">
                             <input 
                               type="number" 
-                              placeholder="+ Amount" 
+                              placeholder="+ Cash" 
                               className="border p-1 rounded text-[11px] w-16 bg-white font-semibold"
                               value={payAmounts[key] || ''}
                               onChange={(e) => setPayAmounts({ ...payAmounts, [key]: e.target.value })}
