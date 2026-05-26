@@ -31,8 +31,8 @@ app.use('/api/v1/attendance', attendanceRoutes);
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/parishes', parishRoutes); 
 app.use('/api/finance', financeRoutes);
-app.use('/api/users', userRoutes);
-
+app.use('/api/v1/users', userRoutes);
+app.use('/api/public', publicRoutes);
 // 2. Mounted your lector routes so the URLs match your frontend perfectly!
 app.use('/api/lectors', lectorRoutes);
 
