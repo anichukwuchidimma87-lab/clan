@@ -4,10 +4,10 @@ import {
   getRegistryData, 
   updateLector, 
   deleteLector, 
-  getActiveParishList, // The dropdown helper
-  bulkUploadParishes   // The Excel upload engine
+  getActiveParishList, 
+  bulkUploadParishes   
 } from '../controllers/lectorController.js';
-import { verifyToken } from '../middleware/authMiddleware.js'; // Your auth gate
+import { protect } from '../middleware/authMiddleware.js'; // Changed verifyToken to protect
 
 const router = express.Router();
 
@@ -15,10 +15,10 @@ const router = express.Router();
 router.get('/parishes-list', getActiveParishList);
 router.post('/checkin', publicCheckIn);
 
-// Secure executive registry paths (Protected by your login token middleware)
-router.get('/registry', verifyToken, getRegistryData);
-router.post('/parishes/bulk-upload', verifyToken, bulkUploadParishes);
-router.put('/update/:id', verifyToken, updateLector);
-router.delete('/delete/:id', verifyToken, deleteLector);
+// Secure executive registry paths (Protected by your protect middleware)
+router.get('/registry', protect, getRegistryData);
+router.post('/parishes/bulk-upload', protect, bulkUploadParishes);
+router.put('/update/:id', protect, updateLector);
+router.delete('/delete/:id', protect, deleteLector);
 
 export default router;
