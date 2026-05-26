@@ -1,16 +1,17 @@
 import React, { useState, useEffect } from 'react';
 
 export default function CheckIn() {
+  const [title, setTitle] = useState('Mr.'); // NEW: Title field state
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [phone, setPhone] = useState('');
   const [gender, setGender] = useState('Male');
   const [ageBracket, setAgeBracket] = useState('21–30');
-  const [yearCommissioned, setYearCommissioned] = useState(new Date().getFullYear());
+  const [yearCommissioned, setYearCommissioned] = useState('Not Commissioned Yet'); // UPDATED: Non-string fallback baseline
   const [employmentStatus, setEmploymentStatus] = useState('Employed');
   const [deanery, setDeanery] = useState('Benin');
   const [parishName, setParishName] = useState('');
-  const [roleInParish, setRoleInParish] = useState('Active Member'); // DEFAULT
+  const [roleInParish, setRoleInParish] = useState('Active Member'); 
 
   // Remote dynamic options variables
   const [masterParishList, setMasterParishList] = useState([]);
@@ -18,6 +19,10 @@ export default function CheckIn() {
   
   const [message, setMessage] = useState({ text: '', isError: false });
   const [submitting, setSubmitting] = useState(false);
+
+  // Generate an array of years for the dropdown selector (e.g., from 1980 up to current year)
+  const currentYearInt = new Date().getFullYear();
+  const yearsArray = Array.from({ length: currentYearInt - 1979 }, (_, index) => currentYearInt - index);
 
   // Pull server configuration options immediately upon opening link
   useEffect(() => {
@@ -27,7 +32,6 @@ export default function CheckIn() {
         const resData = await res.json();
         if (resData.success) {
           setMasterParishList(resData.data);
-          // Sync with the default state ('Benin') automatically
           const initialMatches = resData.data.filter(p => p.deanery.toLowerCase() === deanery.toLowerCase());
           setFilteredParishes(initialMatches);
           if (initialMatches.length > 0) setParishName(initialMatches[0].name);
@@ -64,13 +68,26 @@ export default function CheckIn() {
       const res = await fetch('https://clan-3slh.onrender.com/api/lectors/checkin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ firstName, lastName, phone, gender, ageBracket, yearCommissioned, employmentStatus, deanery, parishName, roleInParish })
+        body: JSON.stringify({ 
+          title, // Sent safely to database array records
+          firstName, 
+          lastName, 
+          phone, 
+          gender, 
+          ageBracket, 
+          yearCommissioned, // Passes either the number string or "Not Commissioned Yet" safely
+          employmentStatus, 
+          deanery, 
+          parishName, 
+          roleInParish 
+        })
       });
 
       const result = await res.json();
       if (result.success) {
-        setMessage({ text: `✓ Registration Successful! Welcome, ${firstName}. Your profile is active.`, isError: false });
+        setMessage({ text: `✓ Registration Successful! Welcome, ${title} ${firstName}. Your profile is active.`, isError: false });
         setFirstName(''); setLastName(''); setPhone('');
+        setYearCommissioned('Not Commissioned Yet');
       } else {
         setMessage({ text: result.message, isError: true });
       }
@@ -96,15 +113,31 @@ export default function CheckIn() {
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4 text-xs font-semibold text-gray-600">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          
+          {/* Row 1: Title selection and First Name layout */}
+          <div className="grid grid-cols-3 gap-3">
             <div>
+              <label className="block mb-1 text-gray-500">Title</label>
+              <select className="border p-2.5 rounded-xl w-full bg-gray-50 text-gray-800 focus:outline-none focus:bg-white font-bold" value={title} onChange={e => setTitle(e.target.value)}>
+                <option value="Mr.">Mr.</option>
+                <option value="Mrs.">Mrs.</option>
+                <option value="Miss">Miss</option>
+                <option value="Bro.">Bro.</option>
+                <option value="Sister">Sister</option>
+                <option value="Dr.">Dr.</option>
+                <option value="Chief">Chief</option>
+              </select>
+            </div>
+            <div className="col-span-2">
               <label className="block mb-1 text-gray-500">First Name</label>
               <input type="text" className="border p-2.5 rounded-xl w-full bg-gray-50 text-gray-800 focus:outline-none focus:bg-white" value={firstName} onChange={e => setFirstName(e.target.value)} required />
             </div>
-            <div>
-              <label className="block mb-1 text-gray-500">Surname (Last Name)</label>
-              <input type="text" className="border p-2.5 rounded-xl w-full bg-gray-50 text-gray-800 focus:outline-none focus:bg-white" value={lastName} onChange={e => setLastName(e.target.value)} required />
-            </div>
+          </div>
+
+          {/* Row 2: Surname layout block */}
+          <div>
+            <label className="block mb-1 text-gray-500">Surname (Last Name)</label>
+            <input type="text" className="border p-2.5 rounded-xl w-full bg-gray-50 text-gray-800 focus:outline-none focus:bg-white" value={lastName} onChange={e => setLastName(e.target.value)} required />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -132,10 +165,22 @@ export default function CheckIn() {
                 <option value="51+">51+</option>
               </select>
             </div>
+            
+            {/* UPDATED: Year Commissioned dynamic selection row container */}
             <div>
               <label className="block mb-1 text-gray-500">Year Commissioned</label>
-              <input type="number" className="border p-2.5 rounded-xl w-full bg-gray-50 text-gray-800 focus:outline-none focus:bg-white text-center font-bold" value={yearCommissioned} onChange={e => setYearCommissioned(e.target.value)} required />
+              <select 
+                className="border p-2.5 rounded-xl w-full bg-gray-50 text-gray-800 focus:outline-none focus:bg-white font-bold text-center" 
+                value={yearCommissioned} 
+                onChange={e => setYearCommissioned(e.target.value)}
+              >
+                <option value="Not Commissioned Yet">Not Available (N/A)</option>
+                {yearsArray.map((yr) => (
+                  <option key={yr} value={yr}>{yr}</option>
+                ))}
+              </select>
             </div>
+
             <div>
               <label className="block mb-1 text-gray-500">Employment State</label>
               <select className="border p-2.5 rounded-xl w-full bg-gray-50 text-gray-800 focus:outline-none focus:bg-white" value={employmentStatus} onChange={e => setEmploymentStatus(e.target.value)}>
