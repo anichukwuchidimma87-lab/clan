@@ -2,9 +2,9 @@ import express from 'express';
 import cors from 'cors';
 import attendanceRoutes from './routes/attendanceRoutes.js';
 import authRoutes from './routes/authRoutes.js';
-import parishRoutes from './routes/parishRoutes.js'; // 1. Import it here
+import parishRoutes from './routes/parishRoutes.js'; 
 import financeRoutes from './routes/financeRoutes.js';
-
+import lectorRoutes from './routes/lectorRoutes.js'; // 1. Imported your lector routes file
 
 const app = express();
 
@@ -18,7 +18,7 @@ app.use(cors({
       callback(new Error('Not allowed by CORS'));
     }
   },
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'], // 2. Added PATCH for updates
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'], 
   credentials: true,
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
@@ -28,8 +28,10 @@ app.options('*', cors());
 // Mount Routes
 app.use('/api/v1/attendance', attendanceRoutes);
 app.use('/api/v1/auth', authRoutes);
-app.use('/api/v1/parishes', parishRoutes); // 3. Mount it here
-// Add this line where your other app.use('/api/...') lines are located
+app.use('/api/v1/parishes', parishRoutes); 
 app.use('/api/finance', financeRoutes);
+
+// 2. Mounted your lector routes so the URLs match your frontend perfectly!
+app.use('/api/lectors', lectorRoutes);
 
 export default app;
