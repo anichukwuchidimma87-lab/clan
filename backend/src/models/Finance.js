@@ -14,6 +14,11 @@ const financeSchema = new mongoose.Schema({
     ref: 'Parish', 
     required: true 
   },
+  // ADDED: This explicitly maps the string name to satisfy the database constraint rule!
+  parishName: {
+    type: String,
+    required: true
+  },
   year: { type: Number, required: true },
   deanery: { type: String, enum: ['Benin'], default: 'Benin' },
   
