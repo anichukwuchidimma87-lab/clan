@@ -4,28 +4,31 @@ const lectorSchema = new mongoose.Schema({
   firstName: { type: String, required: true, trim: true },
   lastName: { type: String, required: true, trim: true },
   phone: { type: String, required: true },
+  gender: { type: String, required: true, enum: ['Male', 'Female'] },
+  ageBracket: { 
+    type: String, 
+    required: true, 
+    enum: ['Under 20', '21–30', '31–40', '41–50', '51+'] 
+  },
+  yearCommissioned: { type: Number, required: true },
+  employmentStatus: { 
+    type: String, 
+    required: true, 
+    enum: ['Employed', 'Self-Employed', 'Student', 'Unemployed'] 
+  },
   deanery: { type: String, required: true, enum: ['Benin', 'Abudu', 'Eguabazua'] },
-  parishName: { type: String, required: true },
-  
-  // Designations inside the specific parish
+  parishName: { type: String, required: true }, // Verified structural match string
   roleInParish: { 
     type: String, 
     required: true, 
     enum: ['Active Member', 'Parish President', 'Parish Vice President', 'Parish Secretary', 'Parish Executive'],
     default: 'Active Member' 
   },
-  
-  // Status state tracking controls
-  status: { 
-    type: String, 
-    required: true, 
-    enum: ['Active', 'Suspended'], 
-    default: 'Active' 
-  },
+  status: { type: String, required: true, enum: ['Active', 'Suspended'], default: 'Active' },
   yearRegistered: { type: Number, default: () => new Date().getFullYear() }
 }, { timestamps: true });
 
-// Prevent a lector with the same first and last name from duplicating inside the same church
+// Strict safety validator preventing twin submissions in the same building
 lectorSchema.index({ firstName: 1, lastName: 1, parishName: 1 }, { unique: true });
 
 export default mongoose.model('Lector', lectorSchema);

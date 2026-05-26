@@ -1,11 +1,32 @@
 import Lector from '../models/Lector.js';
+import FinanceKey from '../models/Finance.js'; // Fallback path mapping or ledger source if needed
 
-// PUBLIC LINK: Public Check-In submission handling
+// HELPER PUBLIC ENDPOINT: Feed drop-down options safely from real administrative datasets
+export const getActiveParishList = async (req, res) => {
+  try {
+    // Collect all existing unique parishes running in the financial ledger matrix setup
+    const ledgerParishes = await FinanceKey.find({}, 'parishName deanery');
+    
+    // Format them out uniquely
+    const structuralMap = ledgerParishes.map(p => ({
+      name: p.parishName,
+      deanery: p.deanery || 'Benin'
+    }));
+    
+    // Filter duplicates out dynamically
+    const uniqueParishes = Array.from(new Map(structuralMap.map(item => [item.name, item])).values());
+    
+    res.status(200).json({ success: true, data: uniqueParishes });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// PUBLIC SUBMISSION POST HANDLER
 export const publicCheckIn = async (req, res) => {
   try {
-    const { firstName, lastName, phone, deanery, parishName, roleInParish } = req.body;
+    const { firstName, lastName, phone, gender, ageBracket, yearCommissioned, employmentStatus, deanery, parishName, roleInParish } = req.body;
 
-    // Check if the first + last name already exist in this specific parish
     const duplicate = await Lector.findOne({
       firstName: firstName.trim(),
       lastName: lastName.trim(),
@@ -23,6 +44,10 @@ export const publicCheckIn = async (req, res) => {
       firstName: firstName.trim(),
       lastName: lastName.trim(),
       phone,
+      gender,
+      ageBracket,
+      yearCommissioned: Number(yearCommissioned),
+      employmentStatus,
       deanery,
       parishName: parishName.trim(),
       roleInParish: roleInParish || 'Active Member'
@@ -34,18 +59,16 @@ export const publicCheckIn = async (req, res) => {
   }
 };
 
-// SECURE REGISTRY: Fetch data based on organizational hierarchy tiering roles
+// MULTI-TENANT ARCHDIOCESAN SECURITY ROSTER GETTER
 export const getRegistryData = async (req, res) => {
   try {
-    const { role, parish } = req.user; // Appended by authorization decoding token payloads
+    const { role, parish } = req.user; 
 
-    // Super Admins and Executives (admins) pull down the entire archdiocesan roster map
     if (role === 'superadmin' || role === 'admin') {
       const allLectors = await Lector.find({});
       return res.status(200).json({ success: true, scope: "all", data: allLectors });
     }
 
-    // Parish Presidents (members) fetch all floor members in their parish, plus Executives from others
     if (role === 'member') {
       const ownParishLectors = await Lector.find({ parishName: parish });
       const otherParishExecutives = await Lector.find({ 
@@ -61,24 +84,22 @@ export const getRegistryData = async (req, res) => {
       });
     }
 
-    res.status(403).json({ success: false, message: "Unauthorized tier access." });
+    res.status(403).json({ success: false, message: "Denied access clearance tier." });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// Update record parameters
 export const updateLector = async (req, res) => {
   try {
     const { id } = req.params;
     const { role, parish } = req.user;
     
     const target = await Lector.findById(id);
-    if (!target) return res.status(404).json({ message: "Lector file record not found" });
+    if (!target) return res.status(404).json({ message: "File missing." });
 
-    // Hierarchy Gate: A Parish President cannot edit records outside their church walls
     if (role === 'member' && target.parishName !== parish) {
-      return res.status(403).json({ message: "Access violation. You can only update your own parish files." });
+      return res.status(403).json({ message: "Unauthorized local perimeter control breach." });
     }
 
     const updated = await Lector.findByIdAndUpdate(id, req.body, { new: true });
@@ -88,21 +109,20 @@ export const updateLector = async (req, res) => {
   }
 };
 
-// Delete record execution parameters
 export const deleteLector = async (req, res) => {
   try {
     const { id } = req.params;
     const { role, parish } = req.user;
 
     const target = await Lector.findById(id);
-    if (!target) return res.status(404).json({ message: "Record not found" });
+    if (!target) return res.status(404).json({ message: "File missing." });
 
     if (role === 'member' && target.parishName !== parish) {
-      return res.status(403).json({ message: "Access violation. Unauthorized parameter." });
+      return res.status(403).json({ message: "Action barred." });
     }
 
     await Lector.findByIdAndDelete(id);
-    res.status(200).json({ success: true, message: "Lector deleted successfully." });
+    res.status(200).json({ success: true, message: "Deleted successfully." });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
