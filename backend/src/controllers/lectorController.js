@@ -32,9 +32,12 @@ export const bulkUploadParishes = async (req, res) => {
     const currentYear = new Date().getFullYear();
 
     for (const item of records) {
-      if (!item.parishName) continue;
+      // FIX: Enhanced string verification to skip empty rows, null objects, or rows containing only white spaces
+      if (!item || !item.parishName || String(item.parishName).trim().length === 0) {
+        continue; 
+      }
       
-      const targetParishName = item.parishName.trim();
+      const targetParishName = String(item.parishName).trim();
 
       // 1. Check if the parish already exists inside your core Registry collection
       let parishDoc = await Parish.findOne({ name: targetParishName });
