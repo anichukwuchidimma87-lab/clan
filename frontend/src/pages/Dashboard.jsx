@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, NavLink } from 'react-router-dom';
 
-// SIDEBAR NAV INTERFACE (Restricted to authorized tiers)
-const RestrictedSidebar = ({ isVisible, userRole, navigate }) => {
-  if (!isVisible) return null; // Fully hidden until logged in
+// SIDEBAR NAV INTERFACE
+const RestrictedSidebar = ({ isVisible, user, navigate }) => {
+  if (!isVisible) return null;
 
-  const isAdmin = userRole === 'admin' || userRole === 'superadmin';
+  const isAdmin = user.role === 'admin' || user.role === 'superadmin';
+  const canApprove = user.role === 'superadmin' || 
+    (user.role === 'admin' && ['President', 'Vice President', 'Secretary', 'Assistant Secretary'].includes(user.position));
 
   return (
     <aside className="w-64 bg-indigo-950 p-6 flex flex-col gap-5 text-gray-200 min-h-screen border-r border-indigo-900 shadow-xl">
@@ -23,11 +25,8 @@ const RestrictedSidebar = ({ isVisible, userRole, navigate }) => {
           <NavLink to="/admin/control" className={({ isActive }) => `flex items-center gap-3 p-3 rounded-lg font-semibold text-xs ${isActive ? 'bg-indigo-600 text-white' : 'hover:bg-indigo-700'}`}>🛠️ Admin Controls</NavLink>
         )}
 
-        // Add this inside your RestrictedSidebar component
         {canApprove && (
-          <NavLink to="/users" className="flex items-center gap-3 p-3 rounded-lg font-semibold text-xs hover:bg-indigo-700">
-            👥 Manage User Access
-          </NavLink>
+          <NavLink to="/users" className={({ isActive }) => `flex items-center gap-3 p-3 rounded-lg font-semibold text-xs ${isActive ? 'bg-indigo-600 text-white' : 'hover:bg-indigo-700'}`}>👥 Manage User Access</NavLink>
         )}
       </nav>
 
@@ -45,12 +44,10 @@ const RestrictedSidebar = ({ isVisible, userRole, navigate }) => {
 };
 
 export default function Dashboard() {
-  const [user, setUser] = useState({ name: '', role: '', parish: '', isLoggedIn: false });
+  const [user, setUser] = useState({ name: '', role: '', position: '', parish: '', isLoggedIn: false });
   const [registryCount, setRegistryCount] = useState(0);
-  const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
-  // Static list of Executives mapped directly from your document
   const executives = [
     { name: "Mr. Abatsu Michael", role: "President", parish: "Holy Trinity" },
     { name: "Mrs. Ella Idahosa", role: "Vice President", parish: "St. Mary Obe" },
@@ -77,6 +74,7 @@ export default function Dashboard() {
           setUser({ 
             name: `${payload.title || 'Mr.'} ${payload.firstName} ${payload.lastName}`, 
             role: payload.role, 
+            position: payload.position || 'Member',
             parish: payload.parish, 
             isLoggedIn: true 
           });
@@ -87,20 +85,17 @@ export default function Dashboard() {
         const resCount = await fetch('https://clan-3slh.onrender.com/api/public/stats');
         const countData = await resCount.json();
         if (countData.success) setRegistryCount(countData.data.totalLectors);
-      } catch (err) { console.error(err); } finally { setLoading(false); }
+      } catch (err) { console.error(err); }
     };
     checkStatus();
   }, []);
 
-  const isAdminOrHigher = user.role === 'admin' || user.role === 'superadmin';
-
   return (
     <div className="min-h-screen bg-gray-50 flex text-xs font-semibold text-gray-600">
       
-      <RestrictedSidebar isVisible={user.isLoggedIn} userRole={user.role} navigate={navigate} />
+      <RestrictedSidebar isVisible={user.isLoggedIn} user={user} navigate={navigate} />
 
       <main className="flex-grow">
-        {/* PUBLIC/PRIVATE DYNAMIC HEADER BAR */}
         <header className="bg-white p-4 border-b border-gray-100 shadow-sm flex flex-wrap justify-between items-center gap-3">
           <div className="flex flex-col gap-0.5">
             <h1 className="text-2xl font-black text-gray-900 tracking-tight">CLAN • Benin City Deanery Hub</h1>
@@ -133,23 +128,18 @@ export default function Dashboard() {
         </header>
 
         <div className="p-6 md:p-8 space-y-8 max-w-7xl mx-auto">
-
-          {/* DYNAMIC WELCOME IMAGE HEADER SECTION */}
-          <section className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 flex flex-col md:flex-row items-center gap-6 transition-all">
-            <div className="w-40 h-40 bg-indigo-50 rounded-full flex items-center justify-center border-4 border-indigo-100/50 overflow-hidden shrink-0 text-5xl shadow-inner">
-              ⛪
-            </div>
+          <section className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 flex flex-col md:flex-row items-center gap-6">
+            <div className="w-40 h-40 bg-indigo-50 rounded-full flex items-center justify-center border-4 border-indigo-100/50 overflow-hidden shrink-0 text-5xl shadow-inner">⛪</div>
             <div className="flex-grow space-y-2 text-center md:text-left">
               <h2 className="text-2xl font-extrabold text-gray-900 tracking-tight leading-snug">
                 Welcome to CLAN <span className="text-indigo-600 font-black">Benin City Deanery Hub Portal</span>
               </h2>
               <p className="text-sm font-medium text-gray-600 max-w-3xl leading-relaxed">
-                Made up of 42 active parishes across Benin City. We serve, we grow, and we proclaim the Word together as the body of the Catholic Lectors Association of Nigeria (CLAN). This secure registry coordinates our structure, deployment tracking, and structural mission.
+                Made up of 42 active parishes across Benin City. We serve, we grow, and we proclaim the Word together as the body of the Catholic Lectors Association of Nigeria (CLAN).
               </p>
             </div>
           </section>
 
-          {/* METRICS PANEL (Shows when logged in) */}
           {user.isLoggedIn && (
             <section className="grid grid-cols-1 md:grid-cols-2 gap-5">
               <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm flex items-center gap-4">
@@ -169,21 +159,14 @@ export default function Dashboard() {
             </section>
           )}
 
-          {/* MEET OUR EXECUTIVES PANEL */}
           <section className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-5">
             <div className="border-b pb-3">
-              <h2 className="text-lg font-black text-gray-900 tracking-tight flex items-center gap-2">
-                <span>👥</span> Benin City Deanery Lectors Executive Council
-              </h2>
-              <p className="text-gray-400 text-xs mt-0.5">Inaugurated @ Saint Andrew Catholic Church, Ugbighokho</p>
+              <h2 className="text-lg font-black text-gray-900 tracking-tight flex items-center gap-2"><span>👥</span> Benin City Deanery Lectors Executive Council</h2>
             </div>
-            
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {executives.map((exec, index) => (
-                <div key={index} className="bg-gray-50/70 border border-gray-100 p-4 rounded-xl flex items-center gap-4 hover:shadow-sm transition">
-                  <div className="w-12 h-12 rounded-full bg-indigo-50 border border-indigo-100/80 flex items-center justify-center font-bold text-xs text-indigo-600 tracking-tighter shrink-0">
-                    {index + 1}
-                  </div>
+                <div key={index} className="bg-gray-50/70 border border-gray-100 p-4 rounded-xl flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-full bg-indigo-50 border border-indigo-100/80 flex items-center justify-center font-bold text-xs text-indigo-600 tracking-tighter shrink-0">{index + 1}</div>
                   <div className="space-y-0.5">
                     <p className="font-bold text-gray-900 text-sm leading-tight">{exec.name}</p>
                     <p className="text-[10px] text-indigo-600 uppercase font-extrabold tracking-wider">{exec.role}</p>
@@ -191,39 +174,6 @@ export default function Dashboard() {
                   </div>
                 </div>
               ))}
-            </div>
-          </section>
-
-          {/* CALL TO ACTION FOOTER */}
-          <section className="bg-indigo-950 text-white rounded-2xl p-6 md:p-8 flex flex-col md:flex-row items-center gap-6 justify-between border border-indigo-900 shadow-xl">
-            <div className="space-y-1.5 flex-grow text-center md:text-left">
-              <h3 className="text-lg font-black tracking-tight">Coordination Command Portal</h3>
-              <p className="text-xs font-medium text-indigo-200 max-w-lg leading-relaxed">Ensure your local parish roster details are completely up to date. Reach out to the admin secretariat for credentials.</p>
-            </div>
-            <div className="flex flex-wrap items-center gap-3 shrink-0">
-              {user.isLoggedIn ? (
-                <button 
-                  onClick={() => navigate('/ledger')}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition shadow-sm"
-                >
-                  🧾 Review Financial Matrix ✓
-                </button>
-              ) : (
-                <>
-                  <button 
-                    onClick={() => navigate('/login')} 
-                    className="border-2 border-white/20 px-4 py-2.5 rounded-xl font-bold text-xs hover:bg-white hover:text-indigo-950 transition"
-                  >
-                    🔐 Cabinet Officials Sign In
-                  </button>
-                  <button 
-                    onClick={() => navigate('/checkin')} 
-                    className="bg-white text-indigo-950 px-4 py-2.5 rounded-xl font-black text-xs hover:bg-gray-100 transition shadow-lg"
-                  >
-                    Lector Roster Check-In
-                  </button>
-                </>
-              )}
             </div>
           </section>
         </div>
