@@ -122,10 +122,7 @@ export default function CheckIn() {
                 <option value="Mr.">Mr.</option>
                 <option value="Mrs.">Mrs.</option>
                 <option value="Miss">Miss</option>
-                <option value="Bro.">Bro.</option>
-                <option value="Sister">Sister</option>
-                <option value="Dr.">Dr.</option>
-                <option value="Chief">Chief</option>
+                
               </select>
             </div>
             <div className="col-span-2">
@@ -198,7 +195,7 @@ export default function CheckIn() {
               <select className="border-2 border-indigo-100 p-2.5 rounded-xl w-full bg-indigo-50 text-indigo-950 focus:outline-none font-bold" value={deanery} onChange={e => handleDeaneryChange(e.target.value)}>
                 <option value="Benin">Benin</option>
                 <option value="Abudu">Abudu</option>
-                <option value="Eguabazua">Eguabazua</option>
+                <option value="Iguobazuwa">Iguobazuwa</option>
               </select>
             </div>
             <div>
