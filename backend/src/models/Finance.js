@@ -4,28 +4,34 @@ const paymentLogSchema = new mongoose.Schema({
   amount: { type: Number, required: true },
   category: { type: String, enum: ['dues', 'seminar', 'competition'], required: true },
   datePaid: { type: Date, default: Date.now },
-  recordedBy: { type: String, required: true } // Name of admin who took the cash
+  recordedBy: { type: String, required: true } // Admin name from validation token payload
 });
 
 const financeSchema = new mongoose.Schema({
-  parishName: { type: String, required: true },
+  // Relational link pointing directly to your Master Parish document in the Registry
+  parish: { 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: 'Parish', 
+    required: true 
+  },
   year: { type: Number, required: true },
-  deanery: { type: String, default: "" },
+  deanery: { type: String, enum: ['Benin'], default: 'Benin' },
   
-  // Set Pricing configurations for the year
+  // Annual target price baselines
   duesPrice: { type: Number, default: 5000 },
   seminarPrice: { type: Number, default: 2500 },
   competitionPrice: { type: Number, default: 5000 },
   
-  // CHANGED: Tracking actual amount currency paid instead of true/false
+  // Real-time currency trackers
   duesPaidAmount: { type: Number, default: 0 },
   seminarPaidAmount: { type: Number, default: 0 },
   competitionPaidAmount: { type: Number, default: 0 },
 
-  // History timeline array
+  // Transaction history audit timelines
   paymentHistory: [paymentLogSchema]
 }, { timestamps: true });
 
-financeSchema.index({ parishName: 1, year: 1 }, { unique: true });
+// Ensures a single parish can only have one financial ledger document sheet mapping per calendar year
+financeSchema.index({ parish: 1, year: 1 }, { unique: true });
 
 export default mongoose.model('Finance', financeSchema);

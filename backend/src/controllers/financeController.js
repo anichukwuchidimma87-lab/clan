@@ -1,10 +1,13 @@
 import Finance from '../models/Finance.js';
+import Parish from '../models/Parish.js';
 
-// Get ledger report with calculated exact partial metrics balances
+// Get ledger report with calculated exact partial metrics balances populated directly from Registry
 export const getLedger = async (req, res) => {
   try {
     const year = parseInt(req.query.year) || new Date().getFullYear();
-    const ledger = await Finance.find({ year });
+    
+    // Finds finance files and deep populates the true name and zone straight from Registry collections
+    const ledger = await Finance.find({ year, deanery: 'Benin' }).populate('parish', 'name zone');
     
     let totalDuesCollected = 0;
     let totalSeminarCollected = 0;
@@ -35,8 +38,8 @@ export const getLedger = async (req, res) => {
 export const recordPayment = async (req, res) => {
   try {
     const { id } = req.params;
-    const { category, amount } = req.body; // category = 'dues', 'seminar', or 'competition'
-    const adminName = req.user.name; // Sourced straight from verification token payload middleware
+    const { category, amount } = req.body; 
+    const adminName = req.user.name; 
 
     const paymentNum = Number(amount);
     if (isNaN(paymentNum) || paymentNum <= 0) {
@@ -48,12 +51,10 @@ export const recordPayment = async (req, res) => {
       return res.status(404).json({ success: false, message: "Parish ledger sheet not found" });
     }
 
-    // Dynamic field tracking targeting routing assignment
     if (category === 'dues') record.duesPaidAmount += paymentNum;
     if (category === 'seminar') record.seminarPaidAmount += paymentNum;
     if (category === 'competition') record.competitionPaidAmount += paymentNum;
 
-    // Push into timeline logs tracker history index
     record.paymentHistory.push({
       amount: paymentNum,
       category,
@@ -68,48 +69,74 @@ export const recordPayment = async (req, res) => {
   }
 };
 
-// Standard individual parish constructor row creation tracking
+// Standard individual parish ledger row manual constructor
 export const addParish = async (req, res) => {
   try {
-    const { parishName, deanery, year, duesPrice, seminarPrice, competitionPrice } = req.body;
+    const { parishName, year, duesPrice, seminarPrice, competitionPrice } = req.body;
     const targetYear = parseInt(year) || new Date().getFullYear();
     
-    const existing = await Finance.findOne({ parishName, year: targetYear });
+    // 1. Locate the registry parent reference object first
+    let masterParish = await Parish.findOne({ name: parishName.trim() });
+    if (!masterParish) {
+      // Create it inside the core registry automatically first if it's missing
+      masterParish = await Parish.create({ name: parishName.trim(), zone: 'Benin' });
+    }
+    
+    const existing = await Finance.findOne({ parish: masterParish._id, year: targetYear });
     if (existing) return res.status(400).json({ message: "Parish year profile sheet already active" });
 
     const newParish = await Finance.create({
-      parishName, deanery, year: targetYear,
-      duesPrice: Number(duesPrice), seminarPrice: Number(seminarPrice), competitionPrice: Number(competitionPrice)
+      parish: masterParish._id,
+      deanery: 'Benin',
+      year: targetYear,
+      duesPrice: Number(duesPrice) || 5000, 
+      seminarPrice: Number(seminarPrice) || 2500, 
+      competitionPrice: Number(competitionPrice) || 5000
     });
+    
     res.status(201).json({ success: true, data: newParish });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// Bulk spreadsheet loader matching new system architecture template parameters
+// Bulk spreadsheet finance ledger loader mapped to relational references
 export const bulkUploadLedger = async (req, res) => {
   try {
     const { records } = req.body;
-    const operations = records.map(record => ({
-      updateOne: {
-        filter: { parishName: record.parishName, year: Number(record.year) },
-        update: { 
+    let uploadCount = 0;
+
+    for (const record of records) {
+      if (!record.parishName) continue;
+
+      // Find the corresponding master reference
+      let masterParish = await Parish.findOne({ name: record.parishName.trim() });
+      if (!masterParish) {
+        masterParish = await Parish.create({ name: record.parishName.trim(), zone: 'Benin' });
+      }
+
+      const targetYear = Number(record.year) || new Date().getFullYear();
+
+      // Upsert financial details tied directly to the MongoDB Object ID reference
+      await Finance.updateOne(
+        { parish: masterParish._id, year: targetYear },
+        {
           $setOnInsert: {
-            deanery: record.deanery || "",
+            deanery: 'Benin',
             duesPrice: Number(record.duesPrice) || 5000,
             seminarPrice: Number(record.seminarPrice) || 2500,
             competitionPrice: Number(record.competitionPrice) || 5000,
-            duesPaidAmount: record.duesPaidAmount || 0,
-            seminarPaidAmount: record.seminarPaidAmount || 0,
-            competitionPaidAmount: record.competitionPaidAmount || 0
+            duesPaidAmount: Number(record.duesPaidAmount) || 0,
+            seminarPaidAmount: Number(record.seminarPaidAmount) || 0,
+            competitionPaidAmount: Number(record.competitionPaidAmount) || 0
           }
         },
-        upsert: true
-      }
-    }));
-    await Finance.bulkWrite(operations);
-    res.status(200).json({ success: true });
+        { upsert: true }
+      );
+      uploadCount++;
+    }
+
+    res.status(200).json({ success: true, message: `Successfully updated financial tracks for ${uploadCount} records.` });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
