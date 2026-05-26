@@ -1,11 +1,12 @@
 import express from 'express';
-import { getLedger, updatePayment } from '../controllers/financeController.js';
+import { getLedger, updatePayment, addParish, bulkUploadLedger } from '../controllers/financeController.js';
 import { protect, authorize } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
-// Only logged in authorized users can view or edit the ledger
 router.get('/ledger', protect, getLedger);
-router.put('/ledger/:id', protect, authorize('IT_ADMIN', 'SECRETARY'), updatePayment);
+router.post('/parish', protect, authorize('superadmin', 'admin'), addParish);
+router.post('/bulk-upload', protect, authorize('superadmin', 'admin'), bulkUploadLedger); // Bulk route
+router.put('/ledger/:id', protect, authorize('superadmin', 'admin'), updatePayment);
 
 export default router;
