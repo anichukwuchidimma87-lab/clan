@@ -23,7 +23,7 @@ export const getActiveParishList = async (req, res) => {
 // EXCEL BULK UPLOAD ENGINE FOR MASTER PARISHES WITH AUTOMATIC FINANCE ACCOUNT INITIALIZATION
 export const bulkUploadParishes = async (req, res) => {
   try {
-    const { records } = req.body; // Array of parsed objects from frontend Excel file reader
+    const { records } = req.body; 
     if (!records || records.length === 0) {
       return res.status(400).json({ success: false, message: "No records detected." });
     }
@@ -32,32 +32,30 @@ export const bulkUploadParishes = async (req, res) => {
     const currentYear = new Date().getFullYear();
 
     for (const item of records) {
-      // FIX: Enhanced string verification to skip empty rows, null objects, or rows containing only white spaces
       if (!item || !item.parishName || String(item.parishName).trim().length === 0) {
         continue; 
       }
       
       const targetParishName = String(item.parishName).trim();
 
-      // 1. Check if the parish already exists inside your core Registry collection
+      // 1. Check or insert into Master Parishes
       let parishDoc = await Parish.findOne({ name: targetParishName });
-      
-      // 2. If it does not exist, insert it fresh into the Master Directory
       if (!parishDoc) {
         parishDoc = await Parish.create({
           name: targetParishName,
-          zone: 'Benin' // Force focus exclusively on Benin City Deanery jurisdiction
+          zone: 'Benin' 
         });
         insertCount++;
       }
 
-      // 3. AUTOMATION LINK: Verify this registry parish possesses a tracking block in the Finance Ledger
-      const financeExists = await Finance.findOne({ parish: parishDoc._id, year: currentYear });
+      // 2. Check your Finance collection using the string name to match your DB schema layout
+      const financeExists = await Finance.findOne({ parishName: targetParishName, year: currentYear });
       
       if (!financeExists) {
-        // Automatically spin up their matching annual accounts with 0 amounts paid
+        // FIX: Explicitly sending 'parishName' so it never saves as a duplicate 'null'!
         await Finance.create({
-          parish: parishDoc._id,
+          parish: parishDoc._id,      // Keeps your relational link intact
+          parishName: targetParishName, // SAFELY FEEDS THE UNIQUE INDEX RULE IN MONGO
           year: currentYear,
           deanery: 'Benin',
           duesPaidAmount: 0,
