@@ -27,8 +27,8 @@ export default function CheckIn() {
         const resData = await res.json();
         if (resData.success) {
           setMasterParishList(resData.data);
-          // Initial run configuration sorting
-          const initialMatches = resData.data.filter(p => p.deanery.toLowerCase() === 'benin');
+          // Sync with the default state ('Benin') automatically
+          const initialMatches = resData.data.filter(p => p.deanery.toLowerCase() === deanery.toLowerCase());
           setFilteredParishes(initialMatches);
           if (initialMatches.length > 0) setParishName(initialMatches[0].name);
         }
@@ -85,7 +85,7 @@ export default function CheckIn() {
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
       <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 max-w-lg w-full space-y-5">
         <div className="text-center">
-          <h1 className="text-xl font-black text-gray-800 tracking-tight">Archdiocesan Lector Registry Submission Form</h1>
+          <h1 className="text-xl font-black text-gray-800 tracking-tight">Benin Deanery Lector Registry</h1>
           <p className="text-xs text-gray-400 mt-1">Please fill out your deployment details carefully to register your profile.</p>
         </div>
 
@@ -149,7 +149,7 @@ export default function CheckIn() {
 
           <div className="border-t pt-4 my-2 grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block mb-1 text-indigo-900 font-bold">1. Select Your Deanery</label>
+              <label className="block mb-1 text-indigo-900 font-bold">1. Select Deanery Zone</label>
               <select className="border-2 border-indigo-100 p-2.5 rounded-xl w-full bg-indigo-50 text-indigo-950 focus:outline-none font-bold" value={deanery} onChange={e => handleDeaneryChange(e.target.value)}>
                 <option value="Benin">Benin</option>
                 <option value="Abudu">Abudu</option>
