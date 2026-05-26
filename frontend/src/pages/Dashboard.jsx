@@ -1,131 +1,149 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
 
 export default function Dashboard() {
-  const [parishes, setParishes] = useState([]);
+  const [ledger, setLedger] = useState([]);
+  const [totals, setTotals] = useState({ dues: 0, seminar: 0, competition: 0, grandTotal: 0 });
+  const [selectedZone, setSelectedZone] = useState('All');
   const [loading, setLoading] = useState(true);
 
-  // Fetch data from backend on load
-  useEffect(() => {
-    const fetchParishes = async () => {
-      try {
-        const token = localStorage.getItem('token');
-        const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/v1/parishes`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        setParishes(response.data);
-        setLoading(false);
-      } catch (err) {
-        console.error("Error fetching ledger:", err);
-        alert("Could not load ledger data.");
-        setLoading(false);
-      }
-    };
-    fetchParishes();
-  }, []);
-
-  const handlePaymentChange = async (parishId, field, value) => {
-    const numericValue = value === '' ? 0 : parseFloat(value) || 0;
-    
-    // Optimistic UI update
-    setParishes(prev =>
-      prev.map(p => (p.id === parishId ? { ...p, [field]: numericValue } : p))
-    );
-
-    // Persist to backend
+  const fetchLedgerData = async () => {
     try {
-      const token = localStorage.getItem('token');
-      await axios.patch(`${import.meta.env.VITE_API_URL}/api/v1/parishes/${parishId}`, 
-        { [field]: numericValue },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      const token = localStorage.getItem('clan_token');
+      const res = await fetch('https://clan-3slh.onrender.com/api/finance/ledger', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const result = await res.json();
+      if (result.success) {
+        setLedger(result.data);
+        setTotals(result.totals);
+      }
     } catch (err) {
-      console.error("Failed to save:", err);
-      alert("Failed to save update to database.");
+      console.error("Error connecting to live ledger API:", err);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const getStatusBadge = (paid, target) => {
-    if (paid === 0) return <span className="px-2 py-1 inline-flex text-xs font-semibold rounded-full bg-red-100 text-red-800">Outstanding</span>;
-    if (paid < target) return <span className="px-2 py-1 inline-flex text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800">Partial</span>;
-    return <span className="px-2 py-1 inline-flex text-xs font-semibold rounded-full bg-green-100 text-green-800">Fully Paid</span>;
+  useEffect(() => {
+    fetchLedgerData();
+  }, []);
+
+  const handleToggle = async (id, field, currentValue) => {
+    try {
+      const token = localStorage.getItem('clan_token');
+      const record = ledger.find(item => item._id === id);
+      
+      const updatedPayload = {
+        duesPaid: record.duesPaid,
+        seminarPaid: record.seminarPaid,
+        competitionPaid: record.competitionPaid,
+        [field]: !currentValue
+      };
+
+      const res = await fetch(`https://clan-3slh.onrender.com/api/finance/ledger/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(updatedPayload)
+      });
+      
+      if (res.ok) {
+        fetchLedgerData(); // Refresh metrics instantly on successful save
+      }
+    } catch (err) {
+      console.error("Failed to update record on live database:", err);
+    }
   };
 
-  const totalDues = parishes.reduce((sum, p) => sum + (p.duesPaid || 0), 0);
-  const totalSeminar = parishes.reduce((sum, p) => sum + (p.seminarPaid || 0), 0);
-  const totalCompetition = parishes.reduce((sum, p) => sum + (p.competitionPaid || 0), 0);
-  const grandTotal = totalDues + totalSeminar + totalCompetition;
+  const filteredLedger = selectedZone === 'All' 
+    ? ledger 
+    : ledger.filter(item => item.zone === selectedZone);
 
-  const handleLogout = () => {
-    localStorage.clear();
-    window.location.href = '/login';
-  };
-
-  if (loading) return <div className="p-10 text-center">Loading Financial Data...</div>;
+  if (loading) return <div className="p-8 text-center">Loading Live Financial Records...</div>;
 
   return (
-    <div className="min-h-screen bg-gray-100 p-6">
-      <div className="flex justify-between items-center mb-8 bg-white p-4 rounded-lg shadow-sm">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Financial Ledger Dashboard</h1>
-        </div>
-        <button onClick={handleLogout} className="bg-gray-200 hover:bg-gray-300 px-4 py-2 rounded-md transition">Sign Out</button>
+    <div className="p-6 max-w-7xl mx-auto space-y-6 bg-gray-50 min-h-screen">
+      <div className="flex justify-between items-center bg-white p-4 rounded-xl shadow-sm">
+        <h1 className="text-2xl font-bold text-gray-800">Financial Ledger Dashboard</h1>
+        <select 
+          className="border p-2 rounded-lg bg-gray-50"
+          value={selectedZone} 
+          onChange={(e) => setSelectedZone(e.target.value)}
+        >
+          <option value="All">All Zones</option>
+          <option value="Benin City">Benin City</option>
+          <option value="Abudu">Abudu</option>
+          <option value="Iguobazuwa">Iguobazuwa</option>
+        </select>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-        <div className="bg-white p-4 rounded-lg shadow-sm border-l-4 border-indigo-500">
-          <p className="text-xs text-gray-500 uppercase">Total Dues</p>
-          <p className="text-xl font-bold">₦{totalDues.toLocaleString()}</p>
+      {/* Financial Summary Metric Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="bg-white p-4 rounded-xl shadow-sm border-l-4 border-blue-600">
+          <p className="text-sm text-gray-500 font-medium">TOTAL DUES (5K)</p>
+          <p className="text-xl font-bold text-gray-900">₦{totals.dues.toLocaleString()}</p>
         </div>
-        <div className="bg-white p-4 rounded-lg shadow-sm border-l-4 border-purple-500">
-          <p className="text-xs text-gray-500 uppercase">Total Seminar</p>
-          <p className="text-xl font-bold">₦{totalSeminar.toLocaleString()}</p>
+        <div className="bg-white p-4 rounded-xl shadow-sm border-l-4 border-purple-600">
+          <p className="text-sm text-gray-500 font-medium">TOTAL SEMINAR (2K)</p>
+          <p className="text-xl font-bold text-gray-900">₦{totals.seminar.toLocaleString()}</p>
         </div>
-        <div className="bg-white p-4 rounded-lg shadow-sm border-l-4 border-pink-500">
-          <p className="text-xs text-gray-500 uppercase">Total Competition</p>
-          <p className="text-xl font-bold">₦{totalCompetition.toLocaleString()}</p>
+        <div className="bg-white p-4 rounded-xl shadow-sm border-l-4 border-pink-600">
+          <p className="text-sm text-gray-500 font-medium">TOTAL COMPETITION (3K)</p>
+          <p className="text-xl font-bold text-gray-900">₦{totals.competition.toLocaleString()}</p>
         </div>
-        <div className="bg-indigo-900 text-white p-4 rounded-lg shadow-sm">
-          <p className="text-xs text-indigo-200 uppercase">Grand Total</p>
-          <p className="text-2xl font-black">₦{grandTotal.toLocaleString()}</p>
+        <div className="bg-indigo-900 text-white p-4 rounded-xl shadow-sm">
+          <p className="text-sm opacity-80 font-medium">GRAND TOTAL COLLECTED</p>
+          <p className="text-2xl font-bold">₦{totals.grandTotal.toLocaleString()}</p>
         </div>
       </div>
 
-      <div className="bg-white shadow rounded-lg overflow-hidden">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs text-gray-500 uppercase">Parish</th>
-              <th className="px-6 py-3 text-left text-xs text-gray-500 uppercase">Dues (5k)</th>
-              <th className="px-6 py-3 text-left text-xs text-gray-500 uppercase">Seminar (2k)</th>
-              <th className="px-6 py-3 text-left text-xs text-gray-500 uppercase">Comp (3k)</th>
-              <th className="px-6 py-3 text-left text-xs text-gray-500 uppercase">Total</th>
+      {/* Main Interactive Matrix Data Grid */}
+      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+        <table className="w-full text-left border-collapse">
+          <thead>
+            <tr className="bg-gray-100 border-b border-gray-200 text-gray-700 font-semibold text-sm">
+              <th className="p-4">Parish Name</th>
+              <th className="p-4">Zone</th>
+              <th className="p-4 text-center">Dues (5k)</th>
+              <th className="p-4 text-center">Seminar (2k)</th>
+              <th className="p-4 text-center">Comp (3k)</th>
             </tr>
           </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {parishes.map((parish) => (
-              <tr key={parish.id} className="hover:bg-gray-50">
-                <td className="px-6 py-4">
-                  <div className="font-bold">{parish.name}</div>
-                  <div className="text-xs text-gray-500">{parish.zone}</div>
-                </td>
-                <td className="px-6 py-4">
-                  <input type="number" className="w-20 border rounded p-1" value={parish.duesPaid} onChange={(e) => handlePaymentChange(parish.id, 'duesPaid', e.target.value)} />
-                  {getStatusBadge(parish.duesPaid, 5000)}
-                </td>
-                <td className="px-6 py-4">
-                  <input type="number" className="w-20 border rounded p-1" value={parish.seminarPaid} onChange={(e) => handlePaymentChange(parish.id, 'seminarPaid', e.target.value)} />
-                  {getStatusBadge(parish.seminarPaid, 2000)}
-                </td>
-                <td className="px-6 py-4">
-                  <input type="number" className="w-20 border rounded p-1" value={parish.competitionPaid} onChange={(e) => handlePaymentChange(parish.id, 'competitionPaid', e.target.value)} />
-                  {getStatusBadge(parish.competitionPaid, 3000)}
-                </td>
-                <td className="px-6 py-4 font-bold text-indigo-600">
-                  ₦{(parish.duesPaid + parish.seminarPaid + parish.competitionPaid).toLocaleString()}
-                </td>
-              </tr>
-            ))}
+          <tbody className="divide-y divide-gray-100 text-sm text-gray-600">
+            {filteredLedger.map((row) => {
+              return (
+                <tr key={row._id} className="hover:bg-gray-50">
+                  <td className="p-4 font-medium text-gray-900">{row.parishName}</td>
+                  <td className="p-4">{row.zone}</td>
+                  <td className="p-4 text-center">
+                    <input 
+                      type="checkbox" 
+                      className="w-4 h-4 text-blue-600 rounded"
+                      checked={row.duesPaid} 
+                      onChange={() => handleToggle(row._id, 'duesPaid', row.duesPaid)}
+                    />
+                  </td>
+                  <td className="p-4 text-center">
+                    <input 
+                      type="checkbox" 
+                      className="w-4 h-4 text-purple-600 rounded"
+                      checked={row.seminarPaid} 
+                      onChange={() => handleToggle(row._id, 'seminarPaid', row.seminarPaid)}
+                    />
+                  </td>
+                  <td className="p-4 text-center">
+                    <input 
+                      type="checkbox" 
+                      className="w-4 h-4 text-pink-600 rounded"
+                      checked={row.competitionPaid} 
+                      onChange={() => handleToggle(row._id, 'competitionPaid', row.competitionPaid)}
+                    />
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

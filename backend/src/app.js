@@ -3,6 +3,8 @@ import cors from 'cors';
 import attendanceRoutes from './routes/attendanceRoutes.js';
 import authRoutes from './routes/authRoutes.js';
 import parishRoutes from './routes/parishRoutes.js'; // 1. Import it here
+import financeRoutes from './routes/financeRoutes.js';
+
 
 const app = express();
 
@@ -27,5 +29,7 @@ app.options('*', cors());
 app.use('/api/v1/attendance', attendanceRoutes);
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/parishes', parishRoutes); // 3. Mount it here
+// Add this line where your other app.use('/api/...') lines are located
+app.use('/api/finance', financeRoutes);
 
 export default app;
