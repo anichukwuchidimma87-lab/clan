@@ -3,7 +3,8 @@ import axios from 'axios';
 import { useNavigate, Link } from 'react-router-dom';
 
 const Register = () => {
-  const [formData, setFormData] = useState({ name: '', email: '', password: '', role: 'SECRETARY' });
+  // FIXED: Changed default role to 'member' to match your system design rules
+  const [formData, setFormData] = useState({ name: '', email: '', password: '', role: 'member' });
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
@@ -31,7 +32,7 @@ const Register = () => {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
       <form onSubmit={handleSubmit} className="p-6 max-w-sm w-full bg-white shadow-md rounded-xl border border-gray-200">
-        <h2 className="text-2xl font-bold text-gray-800 mb-2 text-center">Create Admin Account</h2>
+        <h2 className="text-2xl font-bold text-gray-800 mb-2 text-center">Create Account</h2>
         <p className="text-sm text-gray-500 mb-6 text-center">Register to manage your deanery ledger</p>
         
         <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
@@ -46,7 +47,7 @@ const Register = () => {
         <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
         <input 
           type="email" 
-          placeholder="secretary@example.com" 
+          placeholder="member@example.com" 
           className="block w-full p-2.5 mb-4 border rounded-lg bg-gray-50 text-sm"
           required
           onChange={(e) => setFormData({...formData, email: e.target.value})} 
