@@ -111,6 +111,23 @@ export const publicCheckIn = async (req, res) => {
   }
 };
 
+export const getPublicStats = async (req, res) => {
+  try {
+    const totalLectors = await Lector.countDocuments({ deanery: 'Benin' });
+    const totalParishes = await Parish.countDocuments({ zone: 'Benin' });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        totalLectors,
+        totalParishes
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 // MULTI-TENANT ARCHDIOCESAN SECURITY ROSTER GETTER
 export const getRegistryData = async (req, res) => {
   try {
