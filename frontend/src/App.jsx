@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
@@ -11,6 +11,7 @@ function App() {
   return (
     <Router>
       <Routes>
+        <Route path="/" element={<Navigate to="/login" replace />} />
         {/* Authentication Routes */}
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
@@ -25,6 +26,7 @@ function App() {
         <Route path="/checkin" element={<CheckIn />} />   {/* PUBLIC LINK: Send this to all parishes */}
         <Route path="/registry" element={<Registry />} /> {/* SECURE DASHBOARD: Behind the login wall */}
         <Route path="/users" element={<Users />} /> {/* USER ACCESS MANAGEMENT: For approving new users */}
+        <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </Router>
   );
