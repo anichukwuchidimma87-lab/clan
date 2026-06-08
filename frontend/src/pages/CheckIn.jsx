@@ -11,6 +11,7 @@ export default function CheckIn() {
   const [employmentStatus, setEmploymentStatus] = useState('Employed');
   const [deanery, setDeanery] = useState('Benin');
   const [parishName, setParishName] = useState('');
+  const [parishId, setParishId] = useState('');
   const [roleInParish, setRoleInParish] = useState('Active Member'); 
 
   // Remote dynamic options variables
@@ -34,7 +35,10 @@ export default function CheckIn() {
           setMasterParishList(resData.data);
           const initialMatches = resData.data.filter(p => p.deanery.toLowerCase() === deanery.toLowerCase());
           setFilteredParishes(initialMatches);
-          if (initialMatches.length > 0) setParishName(initialMatches[0].name);
+          if (initialMatches.length > 0) {
+            setParishId(initialMatches[0]._id);
+            setParishName(initialMatches[0].name);
+          }
         }
       } catch (err) {
         console.error("Option generation loop error:", err);
@@ -49,16 +53,18 @@ export default function CheckIn() {
     const matches = masterParishList.filter(p => p.deanery.toLowerCase() === selected.toLowerCase());
     setFilteredParishes(matches);
     if (matches.length > 0) {
+      setParishId(matches[0]._id);
       setParishName(matches[0].name);
     } else {
+      setParishId('');
       setParishName('');
     }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!parishName) {
-      setMessage({ text: "Please assign an active structural parish name location.", isError: true });
+    if (!parishId) {
+      setMessage({ text: "Please select an active parish from the list.", isError: true });
       return;
     }
     setSubmitting(true);
@@ -69,16 +75,16 @@ export default function CheckIn() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          title, // Sent safely to database array records
+          title,
           firstName, 
           lastName, 
           phone, 
           gender, 
           ageBracket, 
-          yearCommissioned, // Passes either the number string or "Not Commissioned Yet" safely
+          yearCommissioned,
           employmentStatus, 
           deanery, 
-          parishName, 
+          parishId,
           roleInParish 
         })
       });
@@ -200,12 +206,21 @@ export default function CheckIn() {
             </div>
             <div>
               <label className="block mb-1 text-indigo-900 font-bold">2. Select Assigned Parish Title</label>
-              <select className="border-2 border-indigo-100 p-2.5 rounded-xl w-full bg-white text-gray-900 focus:outline-none font-bold" value={parishName} onChange={e => setParishName(e.target.value)} required>
+              <select className="border-2 border-indigo-100 p-2.5 rounded-xl w-full bg-white text-gray-900 focus:outline-none font-bold" value={parishId} onChange={e => {
+                const selected = filteredParishes.find(p => p._id === e.target.value);
+                if (selected) {
+                  setParishId(selected._id);
+                  setParishName(selected.name);
+                } else {
+                  setParishId('');
+                  setParishName('');
+                }
+              }} required>
                 {filteredParishes.length === 0 ? (
                   <option value="">No Active Parishes Loaded</option>
                 ) : (
-                  filteredParishes.map((p, idx) => (
-                    <option key={idx} value={p.name}>{p.name}</option>
+                  filteredParishes.map((p) => (
+                    <option key={p._id} value={p._id}>{p.name}</option>
                   ))
                 )}
               </select>

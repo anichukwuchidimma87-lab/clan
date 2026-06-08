@@ -10,6 +10,7 @@ export const getActiveParishList = async (req, res) => {
     
     // Format out uniformly for frontend selector parameters
     const formattedData = approvedParishes.map(p => ({
+      _id: p._id,
       name: p.name,
       deanery: p.zone
     }));
@@ -77,13 +78,30 @@ export const bulkUploadParishes = async (req, res) => {
 // PUBLIC SUBMISSION POST HANDLER
 export const publicCheckIn = async (req, res) => {
   try {
-    const { firstName, lastName, phone, gender, ageBracket, yearCommissioned, employmentStatus, deanery, parishName, roleInParish } = req.body;
+    const { firstName, lastName, phone, gender, ageBracket, yearCommissioned, employmentStatus, deanery, parishName, parishId, roleInParish } = req.body;
 
-    const duplicate = await Lector.findOne({
+    let parishDoc = null;
+    if (parishId) {
+      parishDoc = await Parish.findById(parishId);
+      if (!parishDoc) {
+        return res.status(400).json({ success: false, message: 'Selected parish is invalid.' });
+      }
+    } else if (parishName) {
+      parishDoc = await Parish.findOne({ name: parishName.trim() });
+      if (!parishDoc) {
+        parishDoc = await Parish.create({ name: parishName.trim(), zone: deanery || 'Benin' });
+      }
+    } else {
+      return res.status(400).json({ success: false, message: 'Parish is required.' });
+    }
+
+    const duplicateQuery = {
       firstName: firstName.trim(),
-      lastName: lastName.trim(),
-      parishName: parishName.trim()
-    });
+      lastName: lastName.trim()
+    };
+    if (parishDoc) duplicateQuery.parish = parishDoc._id;
+
+    const duplicate = await Lector.findOne(duplicateQuery);
 
     if (duplicate) {
       return res.status(400).json({
@@ -101,7 +119,8 @@ export const publicCheckIn = async (req, res) => {
       yearCommissioned: Number(yearCommissioned),
       employmentStatus,
       deanery: 'Benin', // Hardlock to Benin deanery profiles
-      parishName: parishName.trim(),
+      parish: parishDoc._id,
+      parishName: parishDoc.name,
       roleInParish: roleInParish || 'Active Member'
     });
 
@@ -149,17 +168,17 @@ export const getRegistryData = async (req, res) => {
     const { role, parish } = req.user; 
 
     if (role === 'superadmin' || role === 'admin') {
-      const allLectors = await Lector.find({ deanery: 'Benin' });
+      const allLectors = await Lector.find({ deanery: 'Benin' }).populate('parish', 'name zone');
       return res.status(200).json({ success: true, scope: "all", data: allLectors });
     }
 
     if (role === 'member') {
-      const ownParishLectors = await Lector.find({ parishName: parish, deanery: 'Benin' });
+      const ownParishLectors = await Lector.find({ parishName: parish, deanery: 'Benin' }).populate('parish', 'name zone');
       const otherParishExecutives = await Lector.find({ 
         parishName: { $ne: parish },
         deanery: 'Benin',
         roleInParish: { $ne: 'Active Member' } 
-      });
+      }).populate('parish', 'name zone');
 
       return res.status(200).json({
         success: true,
@@ -179,7 +198,8 @@ export const updateLector = async (req, res) => {
   try {
     const { id } = req.params;
     const { role, parish } = req.user;
-    
+    const { parishId, parishName, ...updateFields } = req.body;
+
     const target = await Lector.findById(id);
     if (!target) return res.status(404).json({ message: "File missing." });
 
@@ -187,7 +207,24 @@ export const updateLector = async (req, res) => {
       return res.status(403).json({ message: "Unauthorized local perimeter control breach." });
     }
 
-    const updated = await Lector.findByIdAndUpdate(id, req.body, { new: true });
+    if (parishId) {
+      const parishDoc = await Parish.findById(parishId);
+      if (!parishDoc) {
+        return res.status(400).json({ message: 'Invalid parish selection.' });
+      }
+      updateFields.parish = parishDoc._id;
+      updateFields.parishName = parishDoc.name;
+    } else if (parishName) {
+      const parishDoc = await Parish.findOne({ name: parishName.trim() });
+      if (parishDoc) {
+        updateFields.parish = parishDoc._id;
+        updateFields.parishName = parishDoc.name;
+      } else {
+        updateFields.parishName = parishName.trim();
+      }
+    }
+
+    const updated = await Lector.findByIdAndUpdate(id, updateFields, { new: true }).populate('parish', 'name zone');
     res.status(200).json({ success: true, data: updated });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });

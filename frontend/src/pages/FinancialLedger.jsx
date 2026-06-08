@@ -97,7 +97,7 @@ export default function FinancialLedger() {
 
     const worksheet = XLSX.utils.json_to_sheet(reportRows);
     const workbook = XLSX.utils.book_new();
-    XLSX.book_append_sheet(workbook, worksheet, `Ledger Report ${currentYear}`);
+    XLSX.utils.book_append_sheet(workbook, worksheet, `Ledger Report ${currentYear}`);
 
     // Adjust column widths automatically so text is never cut off
     worksheet['!cols'] = [{ wch: 6 }, { wch: 35 }, { wch: 18 }, { wch: 15 }, { wch: 15 }, { wch: 22 }, { wch: 15 }, { wch: 15 }, { wch: 22 }, { wch: 15 }, { wch: 15 }, { wch: 22 }, { wch: 22 }];

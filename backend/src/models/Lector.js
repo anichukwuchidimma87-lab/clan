@@ -17,6 +17,7 @@ const lectorSchema = new mongoose.Schema({
     enum: ['Employed', 'Self-Employed', 'Student', 'Unemployed'] 
   },
   deanery: { type: String, required: true, enum: ['Benin', 'Abudu', 'Eguabazua'] },
+  parish: { type: mongoose.Schema.Types.ObjectId, ref: 'Parish' },
   parishName: { type: String, required: true }, // Verified structural match string
   roleInParish: { 
     type: String, 
