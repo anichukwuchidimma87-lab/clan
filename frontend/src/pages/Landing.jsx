@@ -1,11 +1,49 @@
 import React, { useState, useEffect } from 'react';
+import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import HeroSection from '../components/public/HeroSection';
 import LeadershipShowcase from '../components/public/LeadershipShowcase';
-import RecentEventsSlider from '../components/public/RecentEventsSlider';
+import FeaturedGallery from '../components/public/FeaturedGallery';
 
 function Landing() {
   const navigate = useNavigate();
+  const [galleryItems, setGalleryItems] = useState([]);
+  const [financialSummary, setFinancialSummary] = useState(null);
+  const [loadingGallery, setLoadingGallery] = useState(true);
+  const [loadingSummary, setLoadingSummary] = useState(true);
+
+  useEffect(() => {
+    const apiRoot = import.meta.env.VITE_API_URL || '';
+
+    const fetchGallery = async () => {
+      try {
+        setLoadingGallery(true);
+        const response = await axios.get(`${apiRoot}/api/public/random-gallery`);
+        setGalleryItems(response.data.data || []);
+      } catch (error) {
+        console.error('Could not fetch gallery items:', error);
+        setGalleryItems([]);
+      } finally {
+        setLoadingGallery(false);
+      }
+    };
+
+    const fetchSummary = async () => {
+      try {
+        setLoadingSummary(true);
+        const response = await axios.get(`${apiRoot}/api/public/stats`);
+        setFinancialSummary(response.data.data || null);
+      } catch (error) {
+        console.error('Could not fetch public ledger summary:', error);
+        setFinancialSummary(null);
+      } finally {
+        setLoadingSummary(false);
+      }
+    };
+
+    fetchGallery();
+    fetchSummary();
+  }, []);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
@@ -13,7 +51,7 @@ function Landing() {
       <nav className="bg-white shadow-md">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
           <div className="flex items-center space-x-2">
-            <h1 className="text-2xl font-bold text-blue-700">CLAN Deanery</h1>
+            <h1 className="text-2xl font-bold text-blue-700">CLAN Benin Deanery</h1>
             <p className="text-sm text-gray-600">Leadership & Community Portal</p>
           </div>
           <div className="flex gap-4">
@@ -41,20 +79,48 @@ function Landing() {
         <div className="max-w-7xl mx-auto px-4">
           <h2 className="text-4xl font-bold text-center mb-4 text-gray-800">Leadership Team</h2>
           <p className="text-center text-gray-600 mb-12 max-w-2xl mx-auto">
-            Meet the visionary leaders and patrons guiding the CLAN Deanery toward greater heights of service and spiritual growth.
+            Meet the visionary leaders and patrons guiding the CLAN Benin Deanery toward greater heights of service and spiritual growth.
           </p>
           <LeadershipShowcase />
         </div>
       </section>
 
-      {/* Recent Events Slider */}
+      {/* Public Ledger Summary Section */}
       <section className="py-16 bg-gray-50">
         <div className="max-w-7xl mx-auto px-4">
-          <h2 className="text-4xl font-bold text-center mb-4 text-gray-800">Recent Impact</h2>
+          <h2 className="text-4xl font-bold text-center mb-4 text-gray-800">Public Ledger Snapshot</h2>
           <p className="text-center text-gray-600 mb-12 max-w-2xl mx-auto">
-            Experience the vibrant moments and meaningful events from our community gatherings.
+            The Deanery publishes a transparent summary of parish compliance and community strength without exposing sensitive amounts.
           </p>
-          <RecentEventsSlider />
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="rounded-3xl bg-white p-8 shadow-sm border border-gray-100 text-center">
+              <p className="text-sm uppercase tracking-[0.24em] text-gray-400 mb-3">Total Parishes</p>
+              <p className="text-4xl font-extrabold text-blue-700">{loadingSummary ? '—' : financialSummary?.totalParishes ?? 'N/A'}</p>
+            </div>
+            <div className="rounded-3xl bg-white p-8 shadow-sm border border-gray-100 text-center">
+              <p className="text-sm uppercase tracking-[0.24em] text-gray-400 mb-3">Compliant Parishes</p>
+              <p className="text-4xl font-extrabold text-emerald-600">{loadingSummary ? '—' : financialSummary?.compliantParishes ?? 'N/A'}</p>
+            </div>
+            <div className="rounded-3xl bg-white p-8 shadow-sm border border-gray-100 text-center">
+              <p className="text-sm uppercase tracking-[0.24em] text-gray-400 mb-3">Outstanding Parishes</p>
+              <p className="text-4xl font-extrabold text-amber-600">{loadingSummary ? '—' : financialSummary?.outstandingParishes ?? 'N/A'}</p>
+            </div>
+            <div className="rounded-3xl bg-white p-8 shadow-sm border border-gray-100 text-center">
+              <p className="text-sm uppercase tracking-[0.24em] text-gray-400 mb-3">Registered Lectors</p>
+              <p className="text-4xl font-extrabold text-slate-800">{loadingSummary ? '—' : financialSummary?.totalLectors ?? 'N/A'}</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Featured Gallery Section */}
+      <section className="py-16 bg-white">
+        <div className="max-w-7xl mx-auto px-4">
+          <h2 className="text-4xl font-bold text-center mb-4 text-gray-800">Live Community Gallery</h2>
+          <p className="text-center text-gray-600 mb-12 max-w-2xl mx-auto">
+            Every refresh brings a new combination of leadership, award, event, and community images pulled straight from the gallery engine.
+          </p>
+          <FeaturedGallery items={loadingGallery ? [] : galleryItems} />
         </div>
       </section>
 
@@ -77,7 +143,7 @@ function Landing() {
       {/* Footer */}
       <footer className="bg-gray-800 text-gray-300 py-8">
         <div className="max-w-7xl mx-auto px-4 text-center">
-          <p>&copy; 2026 CLAN Deanery. Dedicated to the service of faith and community.</p>
+          <p>&copy; 2026 CLAN Benin Deanery. Dedicated to the service of faith and community.</p>
         </div>
       </footer>
     </div>

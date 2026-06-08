@@ -1,0 +1,116 @@
+import GalleryItem from '../models/GalleryItem.js';
+
+const sampleCategory = async (category, size) => {
+  const available = await GalleryItem.find({ category });
+  if (!available.length) return [];
+  if (available.length <= size) {
+    return available.sort(() => Math.random() - 0.5);
+  }
+
+  const result = [];
+  const used = new Set();
+  while (result.length < size) {
+    const candidate = available[Math.floor(Math.random() * available.length)];
+    const id = candidate._id.toString();
+    if (!used.has(id)) {
+      used.add(id);
+      result.push(candidate);
+    }
+  }
+
+  return result;
+};
+
+export const createGalleryItem = async (req, res) => {
+  try {
+    const { title, caption, url, category, featured, tags } = req.body;
+
+    if (!url || !category) {
+      return res.status(400).json({ success: false, message: 'Gallery item must include a url and category.' });
+    }
+
+    const newItem = await GalleryItem.create({
+      title,
+      caption,
+      url,
+      category,
+      featured: featured === true || featured === 'true',
+      tags: Array.isArray(tags) ? tags : (typeof tags === 'string' ? tags.split(',').map(tag => tag.trim()) : []),
+      uploadedBy: req.user._id
+    });
+
+    res.status(201).json({ success: true, data: newItem });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const getGalleryItems = async (req, res) => {
+  try {
+    const items = await GalleryItem.find().sort({ createdAt: -1 });
+    res.status(200).json({ success: true, count: items.length, data: items });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const deleteGalleryItem = async (req, res) => {
+  try {
+    const item = await GalleryItem.findById(req.params.id);
+    if (!item) {
+      return res.status(404).json({ success: false, message: 'Gallery item not found.' });
+    }
+
+    await item.remove();
+    res.status(200).json({ success: true, message: 'Gallery item deleted.' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const getRandomGallery = async (req, res) => {
+  try {
+    const gallery = {
+      seminar: await sampleCategory('seminar', 5),
+      voalc: await sampleCategory('voalc', 2),
+      awardees: await sampleCategory('awardees', 2),
+      orphanage: await sampleCategory('orphanage', 2),
+      patrons: await sampleCategory('patrons', 2),
+      executives: await sampleCategory('executives', 3),
+    };
+
+    const payload = [
+      ...gallery.seminar,
+      ...gallery.voalc,
+      ...gallery.awardees,
+      ...gallery.orphanage,
+      ...gallery.patrons,
+      ...gallery.executives,
+    ];
+
+    res.status(200).json({
+      success: true,
+      data: payload,
+      breakdown: {
+        seminar: gallery.seminar.length,
+        voalc: gallery.voalc.length,
+        awardees: gallery.awardees.length,
+        orphanage: gallery.orphanage.length,
+        patrons: gallery.patrons.length,
+        executives: gallery.executives.length,
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const getRecentGallery = async (req, res) => {
+  try {
+    const limit = Number(req.query.limit) || 4;
+    const items = await GalleryItem.find().sort({ createdAt: -1 }).limit(limit);
+    res.status(200).json({ success: true, count: items.length, data: items });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};

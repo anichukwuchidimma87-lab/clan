@@ -3,9 +3,9 @@ import { getPublicStats } from '../controllers/lectorController.js';
 import { 
   getExecutives, 
   getPatrons, 
-  getLeadershipProfiles, 
-  getRecentEvents 
+  getLeadershipProfiles
 } from '../controllers/publicController.js';
+import { getRandomGallery, getRecentGallery } from '../controllers/galleryController.js';
 
 const router = express.Router();
 
@@ -17,7 +17,8 @@ router.get('/executives', getExecutives);
 router.get('/patrons', getPatrons);
 router.get('/leadership', getLeadershipProfiles);
 
-// Recent Events endpoint (for the impact slider)
-router.get('/recent-events', getRecentEvents);
+// Dynamic gallery endpoints
+router.get('/random-gallery', getRandomGallery);
+router.get('/recent-events', getRecentGallery);
 
 export default router;

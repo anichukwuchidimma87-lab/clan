@@ -115,12 +115,27 @@ export const getPublicStats = async (req, res) => {
   try {
     const totalLectors = await Lector.countDocuments({ deanery: 'Benin' });
     const totalParishes = await Parish.countDocuments({ zone: 'Benin' });
+    const parishLedgerCount = await Finance.countDocuments({ deanery: 'Benin' });
+    const outstandingParishes = await Finance.countDocuments({
+      deanery: 'Benin',
+      $expr: {
+        $or: [
+          { $lt: ['$duesPaidAmount', '$duesPrice'] },
+          { $lt: ['$seminarPaidAmount', '$seminarPrice'] },
+          { $lt: ['$competitionPaidAmount', '$competitionPrice'] }
+        ]
+      }
+    });
+    const compliantParishes = Math.max(0, parishLedgerCount - outstandingParishes);
 
     res.status(200).json({
       success: true,
       data: {
         totalLectors,
-        totalParishes
+        totalParishes,
+        parishLedgerCount,
+        compliantParishes,
+        outstandingParishes
       }
     });
   } catch (error) {

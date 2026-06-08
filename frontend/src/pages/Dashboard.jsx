@@ -17,12 +17,25 @@ const RestrictedSidebar = ({ isVisible, user, navigate }) => {
       </div>
       
       <nav className="space-y-2 flex-grow">
+        <div className="px-3 py-2 text-[10px] uppercase tracking-[0.35em] text-indigo-300 font-bold">
+          Core Registry
+        </div>
         <NavLink to="/dashboard" end className={({ isActive }) => `flex items-center gap-3 p-3 rounded-lg font-semibold text-xs ${isActive ? 'bg-indigo-600 text-white shadow-sm' : 'hover:bg-indigo-700'}`}>🏠 Welcome Page</NavLink>
         <NavLink to="/registry" className={({ isActive }) => `flex items-center gap-3 p-3 rounded-lg font-semibold text-xs ${isActive ? 'bg-indigo-600 text-white' : 'hover:bg-indigo-700'}`}>📋 Registry Roster</NavLink>
         <NavLink to="/ledger" className={({ isActive }) => `flex items-center gap-3 p-3 rounded-lg font-semibold text-xs ${isActive ? 'bg-indigo-600 text-white' : 'hover:bg-indigo-700'}`}>🧾 Financial Ledger Matrix</NavLink>
 
+        <div className="mt-4 px-3 py-2 text-[10px] uppercase tracking-[0.35em] text-indigo-300 font-bold">
+          Content Management
+        </div>
+        <NavLink to="/admin/content/executives-gallery" className={({ isActive }) => `flex items-center gap-3 p-3 rounded-lg font-semibold text-xs ${isActive ? 'bg-indigo-600 text-white' : 'hover:bg-indigo-700'}`}>🖼️ Executives Gallery</NavLink>
+        <NavLink to="/admin/content/patrons-gallery" className={({ isActive }) => `flex items-center gap-3 p-3 rounded-lg font-semibold text-xs ${isActive ? 'bg-indigo-600 text-white' : 'hover:bg-indigo-700'}`}>👑 Patronage Gallery</NavLink>
+        <NavLink to="/admin/content/event-chronicles" className={({ isActive }) => `flex items-center gap-3 p-3 rounded-lg font-semibold text-xs ${isActive ? 'bg-indigo-600 text-white' : 'hover:bg-indigo-700'}`}>🎫 Event Chronicles</NavLink>
+        <NavLink to="/admin/content/orphanage-visitations" className={({ isActive }) => `flex items-center gap-3 p-3 rounded-lg font-semibold text-xs ${isActive ? 'bg-indigo-600 text-white' : 'hover:bg-indigo-700'}`}>🏡 Orphanage Visitations</NavLink>
+        <NavLink to="/admin/content/awards-recognition" className={({ isActive }) => `flex items-center gap-3 p-3 rounded-lg font-semibold text-xs ${isActive ? 'bg-indigo-600 text-white' : 'hover:bg-indigo-700'}`}>🏅 Awards & Recognition</NavLink>
+        <NavLink to="/admin/content/voalc" className={({ isActive }) => `flex items-center gap-3 p-3 rounded-lg font-semibold text-xs ${isActive ? 'bg-indigo-600 text-white' : 'hover:bg-indigo-700'}`}>🥇 VOALC Gallery</NavLink>
+
         {isAdmin && (
-          <NavLink to="/admin/control" className={({ isActive }) => `flex items-center gap-3 p-3 rounded-lg font-semibold text-xs ${isActive ? 'bg-indigo-600 text-white' : 'hover:bg-indigo-700'}`}>🛠️ Admin Controls</NavLink>
+          <NavLink to="/admin/control" className={({ isActive }) => `flex items-center gap-3 p-3 rounded-lg font-semibold text-xs ${isActive ? 'bg-indigo-600 text-white' : 'hover:bg-indigo-700'}`}>🛠️ System Settings</NavLink>
         )}
 
         {canApprove && (
