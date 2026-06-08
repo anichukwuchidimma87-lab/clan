@@ -18,6 +18,16 @@ const UserSchema = new mongoose.Schema({
   position: { 
     type: String, 
     default: 'Member' 
+  },
+  // Profile image URL from Cloudinary
+  profileImage: { 
+    type: String, 
+    default: null 
+  },
+  // Profile title or tagline for leadership showcase
+  profileTitle: {
+    type: String,
+    default: null
   }
 });
 

@@ -34,3 +34,40 @@ export const approveUser = async (req, res) => {
     res.status(500).json({ message: 'Server error' });
   }
 };
+
+/**
+ * Update user profile information including position and profile image
+ * Used for admin to update executive/patron profiles
+ */
+export const updateUserProfile = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { position, profileTitle } = req.body;
+    const profileImage = req.file?.path; // Cloudinary URL from multer
+
+    const user = await User.findById(userId);
+    
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Update fields if provided
+    if (position) user.position = position;
+    if (profileTitle) user.profileTitle = profileTitle;
+    if (profileImage) user.profileImage = profileImage;
+
+    await user.save();
+
+    res.json({ 
+      success: true,
+      message: 'User profile updated successfully', 
+      user: user.select('-password') 
+    });
+  } catch (error) {
+    console.error("Error updating user profile:", error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Server error updating profile' 
+    });
+  }
+};
