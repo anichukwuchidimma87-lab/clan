@@ -8,7 +8,7 @@ const router = express.Router();
 // 1. REGISTER NEW USER ROUTE
 router.post('/register', async (req, res) => {
   try {
-    const { name, email, password, role } = req.body;
+    const { name, email, password, role, yearCommissioned } = req.body;
 
     const userExists = await User.findOne({ email });
     if (userExists) {
@@ -19,12 +19,21 @@ router.post('/register', async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, salt);
 
     // FIXED: Explicitly fallback to 'member' to comply with your default rules schema
-    const newUser = await User.create({
+    const newUserPayload = {
       name,
       email,
       password: hashedPassword,
-      role: role || 'member' 
-    });
+      role: role || 'member'
+    };
+
+    const parsedYear = Number(yearCommissioned);
+    if (yearCommissioned !== undefined && yearCommissioned !== null && String(yearCommissioned).trim() !== '' && !Number.isNaN(parsedYear)) {
+      newUserPayload.yearCommissioned = parsedYear;
+    } else {
+      newUserPayload.yearCommissioned = null;
+    }
+
+    const newUser = await User.create(newUserPayload);
 
     res.status(201).json({
       success: true,

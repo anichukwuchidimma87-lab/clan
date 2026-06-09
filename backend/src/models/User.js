@@ -28,6 +28,11 @@ const UserSchema = new mongoose.Schema({
   profileTitle: {
     type: String,
     default: null
+  },
+  yearCommissioned: {
+    type: Number,
+    required: false,
+    default: null
   }
 });
 

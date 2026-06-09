@@ -7,7 +7,8 @@ export default function CheckIn() {
   const [phone, setPhone] = useState('');
   const [gender, setGender] = useState('Male');
   const [ageBracket, setAgeBracket] = useState('21–30');
-  const [yearCommissioned, setYearCommissioned] = useState('Not Commissioned Yet'); // UPDATED: Non-string fallback baseline
+  const [commissionedStatus, setCommissionedStatus] = useState('Not Commissioned');
+  const [yearCommissioned, setYearCommissioned] = useState('');
   const [employmentStatus, setEmploymentStatus] = useState('Employed');
   const [deanery, setDeanery] = useState('Benin');
   const [parishName, setParishName] = useState('');
@@ -67,6 +68,10 @@ export default function CheckIn() {
       setMessage({ text: "Please select an active parish from the list.", isError: true });
       return;
     }
+    if (commissionedStatus === 'Commissioned' && !yearCommissioned) {
+      setMessage({ text: 'Please select the year commissioned or choose Not Commissioned.', isError: true });
+      return;
+    }
     setSubmitting(true);
     setMessage({ text: '', isError: false });
 
@@ -81,7 +86,7 @@ export default function CheckIn() {
           phone, 
           gender, 
           ageBracket, 
-          yearCommissioned,
+          yearCommissioned: commissionedStatus === 'Commissioned' ? Number(yearCommissioned) : null,
           employmentStatus, 
           deanery, 
           parishId,
@@ -93,7 +98,8 @@ export default function CheckIn() {
       if (result.success) {
         setMessage({ text: `✓ Registration Successful! Welcome, ${title} ${firstName}. Your profile is active.`, isError: false });
         setFirstName(''); setLastName(''); setPhone('');
-        setYearCommissioned('Not Commissioned Yet');
+        setCommissionedStatus('Not Commissioned');
+        setYearCommissioned('');
       } else {
         setMessage({ text: result.message, isError: true });
       }
@@ -168,21 +174,44 @@ export default function CheckIn() {
                 <option value="51+">51+</option>
               </select>
             </div>
-            
-            {/* UPDATED: Year Commissioned dynamic selection row container */}
+
             <div>
-              <label className="block mb-1 text-gray-500">Year Commissioned</label>
-              <select 
-                className="border p-2.5 rounded-xl w-full bg-gray-50 text-gray-800 focus:outline-none focus:bg-white font-bold text-center" 
-                value={yearCommissioned} 
-                onChange={e => setYearCommissioned(e.target.value)}
+              <label className="block mb-1 text-gray-500">Commissioned Status</label>
+              <select
+                className="border p-2.5 rounded-xl w-full bg-gray-50 text-gray-800 focus:outline-none focus:bg-white"
+                value={commissionedStatus}
+                onChange={(e) => {
+                  setCommissionedStatus(e.target.value);
+                  if (e.target.value !== 'Commissioned') {
+                    setYearCommissioned('');
+                  }
+                }}
               >
-                <option value="Not Commissioned Yet">Not Available (N/A)</option>
-                {yearsArray.map((yr) => (
-                  <option key={yr} value={yr}>{yr}</option>
-                ))}
+                <option value="Commissioned">Commissioned</option>
+                <option value="Not Commissioned">Not Commissioned</option>
               </select>
             </div>
+
+            {commissionedStatus === 'Commissioned' ? (
+              <div>
+                <label className="block mb-1 text-gray-500">Year Commissioned</label>
+                <select 
+                  className="border p-2.5 rounded-xl w-full bg-gray-50 text-gray-800 focus:outline-none focus:bg-white font-bold text-center" 
+                  value={yearCommissioned} 
+                  onChange={e => setYearCommissioned(e.target.value)}
+                >
+                  <option value="">Select year</option>
+                  {yearsArray.map((yr) => (
+                    <option key={yr} value={yr}>{yr}</option>
+                  ))}
+                </select>
+                <p className="mt-2 text-[11px] text-slate-500">Choose the year you were commissioned. If not commissioned yet, choose "Not Commissioned" above.</p>
+              </div>
+            ) : (
+              <div className="flex items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+                Not commissioned members will be saved without a year value.
+              </div>
+            )}
 
             <div>
               <label className="block mb-1 text-gray-500">Employment State</label>

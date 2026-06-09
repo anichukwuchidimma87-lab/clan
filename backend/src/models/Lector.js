@@ -10,7 +10,7 @@ const lectorSchema = new mongoose.Schema({
     required: true, 
     enum: ['Under 20', '21–30', '31–40', '41–50', '51+'] 
   },
-  yearCommissioned: { type: Number, required: true },
+  yearCommissioned: { type: Number, default: null },
   employmentStatus: { 
     type: String, 
     required: true, 

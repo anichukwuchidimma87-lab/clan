@@ -80,6 +80,11 @@ export const publicCheckIn = async (req, res) => {
   try {
     const { firstName, lastName, phone, gender, ageBracket, yearCommissioned, employmentStatus, deanery, parishName, parishId, roleInParish } = req.body;
 
+    const parsedYear = Number(yearCommissioned);
+    const yearCommissionedValue = (!yearCommissioned || String(yearCommissioned).trim() === '' || String(yearCommissioned).toLowerCase().includes('not commissioned') || Number.isNaN(parsedYear))
+      ? null
+      : parsedYear;
+
     let parishDoc = null;
     if (parishId) {
       parishDoc = await Parish.findById(parishId);
@@ -116,7 +121,7 @@ export const publicCheckIn = async (req, res) => {
       phone,
       gender,
       ageBracket,
-      yearCommissioned: Number(yearCommissioned),
+      yearCommissioned: yearCommissionedValue,
       employmentStatus,
       deanery: 'Benin', // Hardlock to Benin deanery profiles
       parish: parishDoc._id,

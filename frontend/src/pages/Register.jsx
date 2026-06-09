@@ -4,6 +4,8 @@ import axios from 'axios';
 
 export default function Register() {
   const [formData, setFormData] = useState({ name: '', email: '', password: '', role: 'member' });
+  const [commissionedStatus, setCommissionedStatus] = useState('Not Commissioned');
+  const [yearCommissioned, setYearCommissioned] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
@@ -12,7 +14,11 @@ export default function Register() {
     setLoading(true);
     const apiBase = import.meta.env.VITE_API_URL || 'https://clan-3slh.onrender.com';
     try {
-      await axios.post(`${apiBase}/api/v1/auth/register`, formData);
+      const payload = {
+        ...formData,
+        yearCommissioned: commissionedStatus === 'Commissioned' && yearCommissioned ? Number(yearCommissioned) : null
+      };
+      await axios.post(`${apiBase}/api/v1/auth/register`, payload);
       alert('Registration successful!');
       navigate('/login');
     } catch (err) {
@@ -35,6 +41,38 @@ export default function Register() {
           <input type="text" placeholder="Full Name" className="w-full p-3 border rounded-xl" required onChange={(e) => setFormData({...formData, name: e.target.value})} />
           <input type="email" placeholder="Email" className="w-full p-3 border rounded-xl" required onChange={(e) => setFormData({...formData, email: e.target.value})} />
           <input type="password" placeholder="Password" className="w-full p-3 border rounded-xl" required onChange={(e) => setFormData({...formData, password: e.target.value})} />
+          <div className="grid gap-3">
+            <label className="block text-slate-600 text-xs font-semibold">Commissioned Status</label>
+            <select
+              value={commissionedStatus}
+              className="w-full p-3 border rounded-xl"
+              onChange={(e) => {
+                setCommissionedStatus(e.target.value);
+                if (e.target.value !== 'Commissioned') {
+                  setYearCommissioned('');
+                }
+              }}
+            >
+              <option value="Commissioned">Commissioned</option>
+              <option value="Not Commissioned">Not Commissioned</option>
+            </select>
+          </div>
+          {commissionedStatus === 'Commissioned' && (
+            <div>
+              <label className="block text-slate-600 text-xs font-semibold mb-2">Year Commissioned</label>
+              <input
+                type="number"
+                min="1900"
+                max={new Date().getFullYear()}
+                placeholder="Enter year commissioned"
+                className="w-full p-3 border rounded-xl"
+                value={yearCommissioned}
+                onChange={(e) => setYearCommissioned(e.target.value)}
+                required
+              />
+              <p className="mt-2 text-[11px] text-slate-500">Select the year you were commissioned. Leave this blank if you are not commissioned.</p>
+            </div>
+          )}
           <button type="submit" disabled={loading} className="w-full bg-indigo-600 text-white p-3 rounded-xl font-bold">
             {loading ? 'Processing...' : 'Register Account'}
           </button>
