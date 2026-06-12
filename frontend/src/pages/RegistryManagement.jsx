@@ -18,15 +18,52 @@ export default function RegistryManagement() {
     roleInParish: 'Active Member'
   });
   const [newParishName, setNewParishName] = useState('');
+  const [newParishZone, setNewParishZone] = useState('Benin');
   const [editingMember, setEditingMember] = useState(null);
   const [editingParish, setEditingParish] = useState(null);
+  const [editingParishName, setEditingParishName] = useState('');
+  const [editingParishZone, setEditingParishZone] = useState('Benin');
   const [parishMembers, setParishMembers] = useState([]);
   const [selectedParishId, setSelectedParishId] = useState('');
   const [alertMessage, setAlertMessage] = useState(null);
+  const [selectedMember, setSelectedMember] = useState(null);
 
   const token = localStorage.getItem('clan_token');
   const parseJwt = (value) => {
     try { return JSON.parse(atob(value.split('.')[1])); } catch { return null; }
+  };
+
+  const handleUpdateParish = async (e) => {
+    e.preventDefault();
+    if (!editingParish || !editingParish._id) {
+      setAlertMessage({ type: 'error', text: 'No parish selected for update.' });
+      return;
+    }
+    if (!editingParishName.trim()) {
+      setAlertMessage({ type: 'error', text: 'Parish name cannot be empty.' });
+      return;
+    }
+
+    try {
+      const res = await fetch(`https://clan-3slh.onrender.com/api/v1/parishes/${editingParish._id}`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ name: editingParishName.trim(), zone: editingParishZone })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setAlertMessage({ type: 'success', text: 'Parish updated.' });
+        setEditingParish(null);
+        setEditingParishName('');
+        setEditingParishZone('Benin');
+        fetchData();
+      } else {
+        setAlertMessage({ type: 'error', text: data.message || 'Failed to update parish.' });
+      }
+    } catch (err) {
+      console.error('Update parish failed:', err);
+      setAlertMessage({ type: 'error', text: 'Network error while updating parish.' });
+    }
   };
   const payload = token ? parseJwt(token) : null;
 
@@ -121,7 +158,7 @@ export default function RegistryManagement() {
       const res = await fetch('https://clan-3slh.onrender.com/api/v1/parishes', {
         method: 'POST',
         headers,
-        body: JSON.stringify({ name: newParishName.trim(), zone: 'Benin' })
+        body: JSON.stringify({ name: newParishName.trim(), zone: newParishZone || 'Benin' })
       });
       const data = await res.json();
       if (data.success) {
@@ -236,7 +273,7 @@ export default function RegistryManagement() {
                   {activeTab === 'lectors' ? (
                     <button onClick={() => setEditingMember({})} className="rounded-2xl bg-indigo-600 text-white px-4 py-2 text-xs font-semibold">Add New Lector</button>
                   ) : (
-                    <button onClick={() => setEditingParish({})} className="rounded-2xl bg-indigo-600 text-white px-4 py-2 text-xs font-semibold">Add New Parish</button>
+                    <button onClick={() => { setEditingParish(null); setNewParishName(''); setNewParishZone('Benin'); }} className="rounded-2xl bg-indigo-600 text-white px-4 py-2 text-xs font-semibold">Add New Parish</button>
                   )}
                 </div>
               </div>
@@ -312,7 +349,7 @@ export default function RegistryManagement() {
                             <td className="px-4 py-4">{memberCount}</td>
                             <td className="px-4 py-4 space-x-2">
                               <button onClick={() => { setEditingParish(parish); setSelectedParishId(parish._id); handleSelectParish(parish._id); }} className="rounded-2xl bg-slate-100 px-3 py-2 text-[11px] font-semibold text-slate-700 hover:bg-slate-200">Details</button>
-                              <button onClick={() => setEditingParish(parish)} className="rounded-2xl bg-amber-100 px-3 py-2 text-[11px] font-semibold text-amber-700 hover:bg-amber-200">Edit</button>
+                              <button onClick={() => { setEditingParish(parish); setEditingParishName(parish.name); setEditingParishZone(parish.zone || 'Benin'); }} className="rounded-2xl bg-amber-100 px-3 py-2 text-[11px] font-semibold text-amber-700 hover:bg-amber-200">Edit</button>
                               <button onClick={() => handleDeleteParish(parish._id)} className="rounded-2xl bg-rose-100 px-3 py-2 text-[11px] font-semibold text-rose-700 hover:bg-rose-200">Delete</button>
                             </td>
                           </tr>
@@ -358,13 +395,31 @@ export default function RegistryManagement() {
               </div>
             ) : (
               <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5">
-                <h2 className="font-semibold text-slate-900 mb-3">Create Parish</h2>
-                <form onSubmit={handleCreateParish} className="space-y-4 text-xs">
+                <h2 className="font-semibold text-slate-900 mb-3">{editingParish && editingParish._id ? 'Edit Parish' : 'Create Parish'}</h2>
+                <form onSubmit={editingParish && editingParish._id ? handleUpdateParish : handleCreateParish} className="space-y-4 text-xs">
                   <div>
                     <label className="text-slate-500 block mb-1">Parish Name</label>
-                    <input type="text" value={newParishName} onChange={e => setNewParishName(e.target.value)} className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3" required />
+                    <input type="text" value={editingParish && editingParish._id ? editingParishName : newParishName} onChange={e => (editingParish && editingParish._id) ? setEditingParishName(e.target.value) : setNewParishName(e.target.value)} className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3" required />
                   </div>
-                  <button type="submit" className="w-full rounded-2xl bg-indigo-600 text-white py-3 font-semibold">Add Parish</button>
+                  <div>
+                    <label className="text-slate-500 block mb-1">Zone</label>
+                    <select
+                      value={editingParish && editingParish._id ? editingParishZone : newParishZone}
+                      onChange={e => {
+                        if (editingParish && editingParish._id) setEditingParishZone(e.target.value);
+                        else setNewParishZone(e.target.value);
+                      }}
+                      className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3"
+                    >
+                      <option value="Benin">Benin</option>
+                      <option value="Abudu">Abudu</option>
+                      <option value="Iguobazuwa">Iguobazuwa</option>
+                    </select>
+                  </div>
+                  <button type="submit" className="w-full rounded-2xl bg-indigo-600 text-white py-3 font-semibold">{editingParish && editingParish._id ? 'Save Changes' : 'Add Parish'}</button>
+                  {editingParish && editingParish._id && (
+                    <button type="button" onClick={() => { setEditingParish(null); setEditingParishName(''); setEditingParishZone('Benin'); }} className="w-full mt-2 rounded-2xl bg-slate-100 text-slate-700 py-3 font-semibold">Cancel Edit</button>
+                  )}
                 </form>
               </div>
             )}
@@ -373,16 +428,85 @@ export default function RegistryManagement() {
               <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5">
                 <h2 className="font-semibold text-slate-900 mb-3">Parish Members</h2>
                 {parishMembers.length > 0 ? (
-                  <ul className="space-y-3 text-xs text-slate-600">
-                    {parishMembers.map(member => (
-                      <li key={member._id} className="rounded-2xl border border-slate-200 p-3 bg-slate-50">
-                        <p className="font-semibold text-slate-900">{member.firstName} {member.lastName}</p>
-                        <p>{member.roleInParish}</p>
-                      </li>
-                    ))}
-                  </ul>
+                  (() => {
+                    const rolesOrder = ['Parish President', 'Parish Vice President', 'Parish Secretary', 'Parish Executive', 'Active Member'];
+                    const grouped = parishMembers.reduce((acc, m) => {
+                      const role = m.roleInParish || 'Active Member';
+                      if (!acc[role]) acc[role] = [];
+                      if ((m.status || 'Active') === 'Active') acc[role].push(m);
+                      return acc;
+                    }, {});
+
+                    return (
+                      <div className="space-y-3 text-xs text-slate-600">
+                        {rolesOrder.map(roleKey => (
+                          grouped[roleKey] && grouped[roleKey].length > 0 ? (
+                            <div key={roleKey}>
+                              <h3 className="text-sm font-semibold text-slate-800 mt-2">{roleKey}</h3>
+                              <ul className="mt-2 space-y-2">
+                                {grouped[roleKey].map(member => (
+                                  <li key={member._id} className="rounded-2xl border border-slate-200 p-3 bg-slate-50 flex items-center justify-between">
+                                    <button onClick={() => setSelectedMember(member)} className="text-left">
+                                      <p className="font-semibold text-slate-900">{member.firstName} {member.lastName}</p>
+                                      <p className="text-[11px] text-slate-500">{member.phone}</p>
+                                    </button>
+                                    <div className="flex gap-2">
+                                      <button onClick={() => { setEditingMember(member); setFormState(prev => ({ ...prev, firstName: member.firstName, lastName: member.lastName, phone: member.phone, parishId: member.parish?._id || member.parishId || '' })); }} className="rounded-2xl bg-slate-100 px-3 py-2 text-[11px] font-semibold text-slate-700 hover:bg-slate-200">Edit</button>
+                                      <button onClick={() => handleDeleteMember(member._id)} className="rounded-2xl bg-rose-100 px-3 py-2 text-[11px] font-semibold text-rose-700 hover:bg-rose-200">Delete</button>
+                                    </div>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          ) : null
+                        ))}
+
+                        {Object.keys(grouped).filter(k => !rolesOrder.includes(k)).map(k => (
+                          <div key={k}>
+                            <h3 className="text-sm font-semibold text-slate-800 mt-2">{k}</h3>
+                            <ul className="mt-2 space-y-2">
+                              {grouped[k].map(member => (
+                                <li key={member._id} className="rounded-2xl border border-slate-200 p-3 bg-slate-50 flex items-center justify-between">
+                                  <button onClick={() => setSelectedMember(member)} className="text-left">
+                                    <p className="font-semibold text-slate-900">{member.firstName} {member.lastName}</p>
+                                    <p className="text-[11px] text-slate-500">{member.phone}</p>
+                                  </button>
+                                  <div className="flex gap-2">
+                                    <button onClick={() => { setEditingMember(member); setFormState(prev => ({ ...prev, firstName: member.firstName, lastName: member.lastName, phone: member.phone, parishId: member.parish?._id || member.parishId || '' })); }} className="rounded-2xl bg-slate-100 px-3 py-2 text-[11px] font-semibold text-slate-700 hover:bg-slate-200">Edit</button>
+                                    <button onClick={() => handleDeleteMember(member._id)} className="rounded-2xl bg-rose-100 px-3 py-2 text-[11px] font-semibold text-rose-700 hover:bg-rose-200">Delete</button>
+                                  </div>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()
                 ) : (
                   <p className="text-slate-500 text-xs">Select a parish row to view its active members.</p>
+                )}
+
+                {selectedMember && (
+                  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+                    <div className="bg-white rounded-xl p-6 w-full max-w-md">
+                      <div className="flex justify-between items-start">
+                        <h3 className="text-lg font-bold">{selectedMember.firstName} {selectedMember.lastName}</h3>
+                        <button onClick={() => setSelectedMember(null)} className="text-slate-500">Close</button>
+                      </div>
+                      <div className="mt-4 text-sm text-slate-700">
+                        <p><strong>Phone:</strong> {selectedMember.phone || 'N/A'}</p>
+                        <p><strong>Role:</strong> {selectedMember.roleInParish || 'Member'}</p>
+                        <p><strong>Parish:</strong> {(selectedMember.parish && selectedMember.parish.name) || selectedMember.parishName || 'Unassigned'}</p>
+                        <p><strong>Gender:</strong> {selectedMember.gender || 'N/A'}</p>
+                        <p><strong>Age Bracket:</strong> {selectedMember.ageBracket || 'N/A'}</p>
+                        <p><strong>Year Commissioned:</strong> {selectedMember.yearCommissioned || 'N/A'}</p>
+                      </div>
+                      <div className="mt-4 flex justify-end">
+                        <button onClick={() => setSelectedMember(null)} className="rounded-2xl bg-indigo-600 text-white px-4 py-2">Close</button>
+                      </div>
+                    </div>
+                  </div>
                 )}
               </div>
             )}
