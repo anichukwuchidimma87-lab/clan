@@ -170,30 +170,74 @@ export const getPublicStats = async (req, res) => {
 // MULTI-TENANT ARCHDIOCESAN SECURITY ROSTER GETTER
 export const getRegistryData = async (req, res) => {
   try {
-    const { role, parish } = req.user; 
+    const { role, parish } = req.user;
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(100, Math.max(10, parseInt(req.query.limit, 10) || 20));
+    const search = req.query.search ? String(req.query.search).trim() : '';
+
+    const buildSearchFilter = () => {
+      if (!search) return {};
+      const regex = new RegExp(search, 'i');
+      return {
+        $or: [
+          { firstName: regex },
+          { lastName: regex },
+          { parishName: regex },
+          { roleInParish: regex }
+        ]
+      };
+    };
 
     if (role === 'superadmin' || role === 'admin') {
-      const allLectors = await Lector.find({ deanery: 'Benin' }).populate('parish', 'name zone');
-      return res.status(200).json({ success: true, scope: "all", data: allLectors });
-    }
-
-    if (role === 'member') {
-      const ownParishLectors = await Lector.find({ parishName: parish, deanery: 'Benin' }).populate('parish', 'name zone');
-      const otherParishExecutives = await Lector.find({ 
-        parishName: { $ne: parish },
+      const filter = {
         deanery: 'Benin',
-        roleInParish: { $ne: 'Active Member' } 
-      }).populate('parish', 'name zone');
+        ...buildSearchFilter()
+      };
+
+      const totalCount = await Lector.countDocuments(filter);
+      const lectors = await Lector.find(filter)
+        .populate('parish', 'name zone')
+        .sort({ lastName: 1, firstName: 1 })
+        .skip((page - 1) * limit)
+        .limit(limit);
 
       return res.status(200).json({
         success: true,
-        scope: "restricted",
+        scope: 'all',
+        page,
+        limit,
+        totalCount,
+        totalPages: Math.ceil(totalCount / limit),
+        data: lectors
+      });
+    }
+
+    if (role === 'member') {
+      const sharedSearch = buildSearchFilter();
+      const ownParishFilter = {
+        parishName: parish,
+        deanery: 'Benin',
+        ...sharedSearch
+      };
+      const otherParishFilter = {
+        parishName: { $ne: parish },
+        deanery: 'Benin',
+        roleInParish: { $ne: 'Active Member' },
+        ...sharedSearch
+      };
+
+      const ownParishLectors = await Lector.find(ownParishFilter).populate('parish', 'name zone');
+      const otherParishExecutives = await Lector.find(otherParishFilter).populate('parish', 'name zone');
+
+      return res.status(200).json({
+        success: true,
+        scope: 'restricted',
         ownParish: ownParishLectors,
         otherExecutives: otherParishExecutives
       });
     }
 
-    res.status(403).json({ success: false, message: "Denied access clearance tier." });
+    res.status(403).json({ success: false, message: 'Denied access clearance tier.' });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

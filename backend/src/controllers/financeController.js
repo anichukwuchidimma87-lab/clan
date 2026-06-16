@@ -73,27 +73,30 @@ export const recordPayment = async (req, res) => {
 export const addParish = async (req, res) => {
   try {
     const { parishName, year, duesPrice, seminarPrice, competitionPrice } = req.body;
-    const targetYear = parseInt(year) || new Date().getFullYear();
-    
-    // 1. Locate the registry parent reference object first
-    let masterParish = await Parish.findOne({ name: parishName.trim() });
-    if (!masterParish) {
-      // Create it inside the core registry automatically first if it's missing
-      masterParish = await Parish.create({ name: parishName.trim(), zone: 'Benin' });
+    const targetYear = parseInt(year, 10) || new Date().getFullYear();
+
+    if (!parishName || !parishName.trim()) {
+      return res.status(400).json({ success: false, message: 'A valid parish name is required.' });
     }
-    
+
+    const masterParish = await Parish.findOne({ name: parishName.trim() });
+    if (!masterParish) {
+      return res.status(400).json({ success: false, message: 'This parish does not exist in the centralized registry. Create it from the parish directory first.' });
+    }
+
     const existing = await Finance.findOne({ parish: masterParish._id, year: targetYear });
-    if (existing) return res.status(400).json({ message: "Parish year profile sheet already active" });
+    if (existing) return res.status(400).json({ success: false, message: 'Parish year profile sheet already active.' });
 
     const newParish = await Finance.create({
       parish: masterParish._id,
+      parishName: masterParish.name,
       deanery: 'Benin',
       year: targetYear,
-      duesPrice: Number(duesPrice) || 5000, 
-      seminarPrice: Number(seminarPrice) || 2500, 
+      duesPrice: Number(duesPrice) || 5000,
+      seminarPrice: Number(seminarPrice) || 2500,
       competitionPrice: Number(competitionPrice) || 5000
     });
-    
+
     res.status(201).json({ success: true, data: newParish });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -105,14 +108,16 @@ export const bulkUploadLedger = async (req, res) => {
   try {
     const { records } = req.body;
     let uploadCount = 0;
+    const missingParishes = new Set();
 
     for (const record of records) {
       if (!record.parishName) continue;
 
-      // Find the corresponding master reference
-      let masterParish = await Parish.findOne({ name: record.parishName.trim() });
+      const parishName = String(record.parishName).trim();
+      const masterParish = await Parish.findOne({ name: parishName });
       if (!masterParish) {
-        masterParish = await Parish.create({ name: record.parishName.trim(), zone: 'Benin' });
+        missingParishes.add(parishName);
+        continue;
       }
 
       const targetYear = Number(record.year) || new Date().getFullYear();
@@ -122,6 +127,7 @@ export const bulkUploadLedger = async (req, res) => {
         { parish: masterParish._id, year: targetYear },
         {
           $setOnInsert: {
+            parishName: masterParish.name,
             deanery: 'Benin',
             duesPrice: Number(record.duesPrice) || 5000,
             seminarPrice: Number(record.seminarPrice) || 2500,
@@ -136,7 +142,44 @@ export const bulkUploadLedger = async (req, res) => {
       uploadCount++;
     }
 
-    res.status(200).json({ success: true, message: `Successfully updated financial tracks for ${uploadCount} records.` });
+    const response = {
+      success: true,
+      message: `Successfully updated financial tracks for ${uploadCount} records.`
+    };
+
+    if (missingParishes.size > 0) {
+      response.note = `The following parishes were skipped because they are not present in the centralized parish registry: ${[...missingParishes].join(', ')}.`;
+    }
+
+    res.status(200).json(response);
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const updateLedgerFees = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { duesPrice, seminarPrice, competitionPrice } = req.body;
+    const parsedDues = Number(duesPrice);
+    const parsedSeminar = Number(seminarPrice);
+    const parsedCompetition = Number(competitionPrice);
+
+    if ([parsedDues, parsedSeminar, parsedCompetition].some(value => Number.isNaN(value) || value < 0)) {
+      return res.status(400).json({ success: false, message: 'Fee values must be valid non-negative numbers.' });
+    }
+
+    const record = await Finance.findById(id);
+    if (!record) {
+      return res.status(404).json({ success: false, message: 'Ledger record not found.' });
+    }
+
+    record.duesPrice = parsedDues;
+    record.seminarPrice = parsedSeminar;
+    record.competitionPrice = parsedCompetition;
+    await record.save();
+
+    res.status(200).json({ success: true, data: record });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

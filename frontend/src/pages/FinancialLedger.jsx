@@ -320,36 +320,14 @@ export default function FinancialLedger() {
             </div>
           </div>
 
-          {/* Individual Manual Input Tracker Panel */}
+          {/* Replace manual parish creation with a link to the centralized Parish Directory */}
           <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-            <h3 className="text-xs font-black text-gray-800 uppercase tracking-wider mb-3">Add Single Parish Setup Profile</h3>
-            <form onSubmit={handleManualAdd} className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-6 gap-3">
-              <div className="md:col-span-2">
-                <input type="text" placeholder="Parish Name" className="border p-1.5 rounded-lg text-xs w-full font-semibold text-gray-800" value={newParishName} onChange={(e) => setNewParishName(e.target.value)} required />
-              </div>
-              <div>
-                <select className="border p-1.5 rounded-lg text-xs w-full bg-white font-bold text-gray-700" value={newParishDeanery} onChange={(e) => setNewParishDeanery(e.target.value)}>
-                  <option value="Benin">Benin</option>
-                  <option value="Abudu">Abudu</option>
-                  <option value="Eguabazua">Eguabazua</option>
-                </select>
-              </div>
-              <div>
-                <input type="number" placeholder="Year" className="border p-1.5 rounded-lg text-xs w-full text-center font-semibold" value={formYear} onChange={(e) => setFormYear(Number(e.target.value))} required />
-              </div>
-              <div>
-                <input type="number" placeholder="Dues Fee" className="border p-1.5 rounded-lg text-xs w-full text-center font-semibold" value={formDues} onChange={(e) => setFormDues(Number(e.target.value))} required />
-              </div>
-              <div>
-                <input type="number" placeholder="Seminar Fee" className="border p-1.5 rounded-lg text-xs w-full text-center font-semibold" value={formSeminar} onChange={(e) => setFormSeminar(Number(e.target.value))} required />
-              </div>
-              <div className="md:col-span-2">
-                <input type="number" placeholder="Competition Fee" className="border p-1.5 rounded-lg text-xs w-full text-center font-semibold" value={formComp} onChange={(e) => setFormComp(Number(e.target.value))} required />
-              </div>
-              <div className="md:col-span-4">
-                <button type="submit" className="bg-indigo-600 text-white font-bold rounded-lg w-full py-1.5 hover:bg-indigo-700 transition shadow-sm">+ Save Individual Parish Profile</button>
-              </div>
-            </form>
+            <h3 className="text-xs font-black text-gray-800 uppercase tracking-wider mb-3">Parish Directory</h3>
+            <p className="text-sm text-gray-600 mb-3">Parish ledger sheets are created from the centralized Parish Directory to maintain a single source of truth.</p>
+            <div className="flex gap-2">
+              <button onClick={() => navigate('/registry?tab=parishes')} className="bg-indigo-600 text-white font-bold rounded-lg px-4 py-2 hover:bg-indigo-700">Open Parish Directory</button>
+              <button onClick={() => navigate('/admin/content/executives-gallery')} className="bg-slate-100 text-slate-700 font-semibold rounded-lg px-4 py-2 hover:bg-slate-200">Manage Gallery</button>
+            </div>
           </div>
 
         </div>

@@ -4,6 +4,9 @@ export default function RegistryManagement() {
   const [activeTab, setActiveTab] = useState('lectors');
   const [members, setMembers] = useState([]);
   const [parishes, setParishes] = useState([]);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [formState, setFormState] = useState({
@@ -76,7 +79,7 @@ export default function RegistryManagement() {
     try {
       setLoading(true);
       const [membersRes, parishesRes] = await Promise.all([
-        fetch('https://clan-3slh.onrender.com/api/lectors/registry', { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`https://clan-3slh.onrender.com/api/lectors/registry?limit=20&page=1&search=${encodeURIComponent(searchQuery)}`, { headers: { Authorization: `Bearer ${token}` } }),
         fetch('https://clan-3slh.onrender.com/api/v1/parishes', { headers })
       ]);
 
@@ -84,8 +87,16 @@ export default function RegistryManagement() {
       const parishesJson = await parishesRes.json();
 
       if (membersJson.success) {
-        const allMembers = membersJson.scope === 'all' ? membersJson.data : membersJson.ownParish;
-        setMembers(allMembers);
+        if (membersJson.scope === 'all') {
+          setMembers(membersJson.data || []);
+          setPage(membersJson.page || 1);
+          setTotalPages(membersJson.totalPages || 1);
+        } else {
+          const allMembers = membersJson.ownParish || membersJson.data || [];
+          setMembers(allMembers);
+          setPage(1);
+          setTotalPages(1);
+        }
       }
 
       if (parishesJson.success) {
@@ -104,6 +115,57 @@ export default function RegistryManagement() {
   useEffect(() => {
     fetchData();
   }, []);
+
+  // Debounced search
+  useEffect(() => {
+    const t = setTimeout(() => {
+      // reset to first page for new searches
+      handleSearch();
+    }, 500);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
+
+  const handleSearch = async () => {
+    try {
+      setLoading(true);
+      const res = await fetch(`https://clan-3slh.onrender.com/api/lectors/registry?limit=20&page=1&search=${encodeURIComponent(searchQuery)}`, { headers: { Authorization: `Bearer ${token}` } });
+      const json = await res.json();
+      if (json.success) {
+        if (json.scope === 'all') {
+          setMembers(json.data || []);
+          setPage(json.page || 1);
+          setTotalPages(json.totalPages || 1);
+        } else {
+          setMembers(json.ownParish || json.data || []);
+          setPage(1);
+          setTotalPages(1);
+        }
+      }
+    } catch (err) {
+      console.error('Search failed', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadMore = async () => {
+    if (page >= totalPages) return;
+    const next = page + 1;
+    setLoadingMore(true);
+    try {
+      const res = await fetch(`https://clan-3slh.onrender.com/api/lectors/registry?limit=20&page=${next}&search=${encodeURIComponent(searchQuery)}`, { headers: { Authorization: `Bearer ${token}` } });
+      const json = await res.json();
+      if (json.success && json.scope === 'all') {
+        setMembers(prev => [...prev, ...(json.data || [])]);
+        setPage(json.page || next);
+        setTotalPages(json.totalPages || totalPages);
+      }
+    } catch (err) {
+      console.error('Load more failed', err);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   const handleAddMember = async (e) => {
     e.preventDefault();
@@ -228,11 +290,7 @@ export default function RegistryManagement() {
     }
   };
 
-  const filteredMembers = members.filter(member => {
-    const fullName = `${member.firstName} ${member.lastName}`.toLowerCase();
-    const parish = (member.parishName || (member.parish && member.parish.name) || '').toLowerCase();
-    return fullName.includes(searchQuery.toLowerCase()) || parish.includes(searchQuery.toLowerCase());
-  });
+  const filteredMembers = members; // server-driven filtering/pagination
 
   const filteredParishes = parishes.filter(parish => parish.name.toLowerCase().includes(searchQuery.toLowerCase()));
 
@@ -326,6 +384,13 @@ export default function RegistryManagement() {
                     </tbody>
                   </table>
                 </div>
+                {page < totalPages && (
+                  <div className="p-4 text-center">
+                    <button onClick={loadMore} disabled={loadingMore} className="rounded-2xl bg-indigo-600 text-white px-4 py-2 text-[12px] font-semibold">
+                      {loadingMore ? 'Loading…' : 'Load More'}
+                    </button>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">

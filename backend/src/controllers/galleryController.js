@@ -24,15 +24,17 @@ const sampleCategory = async (category, size) => {
 export const createGalleryItem = async (req, res) => {
   try {
     const { title, caption, url, category, featured, tags } = req.body;
+    const uploadedUrl = req.file?.path;
+    const finalUrl = uploadedUrl || url;
 
-    if (!url || !category) {
+    if (!finalUrl || !category) {
       return res.status(400).json({ success: false, message: 'Gallery item must include a url and category.' });
     }
 
     const newItem = await GalleryItem.create({
       title,
       caption,
-      url,
+      url: finalUrl,
       category,
       featured: featured === true || featured === 'true',
       tags: Array.isArray(tags) ? tags : (typeof tags === 'string' ? tags.split(',').map(tag => tag.trim()) : []),
@@ -47,7 +49,19 @@ export const createGalleryItem = async (req, res) => {
 
 export const getGalleryItems = async (req, res) => {
   try {
-    const items = await GalleryItem.find().sort({ createdAt: -1 });
+    const { category, search } = req.query;
+    const filter = {};
+    if (category) filter.category = category;
+    if (search) {
+      const regex = new RegExp(String(search), 'i');
+      filter.$or = [
+        { title: regex },
+        { caption: regex },
+        { category: regex },
+        { tags: regex }
+      ];
+    }
+    const items = await GalleryItem.find(filter).sort({ createdAt: -1 });
     res.status(200).json({ success: true, count: items.length, data: items });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
