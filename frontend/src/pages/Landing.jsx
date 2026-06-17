@@ -11,6 +11,9 @@ function Landing() {
   const [financialSummary, setFinancialSummary] = useState(null);
   const [loadingGallery, setLoadingGallery] = useState(true);
   const [loadingSummary, setLoadingSummary] = useState(true);
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+
+  const yearOptions = [2024, 2025, 2026, 2027];
 
   useEffect(() => {
     const apiRoot = import.meta.env.VITE_API_URL || '';
@@ -32,8 +35,8 @@ function Landing() {
     const fetchSummary = async () => {
       try {
         setLoadingSummary(true);
-        const response = await axios.get(`${apiRoot}/api/public/stats`);
-        console.log('Public ledger stats response:', response.data);
+        const response = await axios.get(`${apiRoot}/api/public/stats?year=${selectedYear}`);
+        console.log('Public ledger stats response for year', selectedYear, ':', response.data);
         setFinancialSummary(response.data.data || null);
       } catch (error) {
         console.error('Could not fetch public ledger summary:', error);
@@ -45,7 +48,7 @@ function Landing() {
 
     fetchGallery();
     fetchSummary();
-  }, []);
+  }, [selectedYear]);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
@@ -90,10 +93,26 @@ function Landing() {
       {/* Public Ledger Summary Section */}
       <section className="py-16 bg-gray-50">
         <div className="max-w-7xl mx-auto px-4">
-          <h2 className="text-4xl font-bold text-center mb-4 text-gray-800">Public Ledger Snapshot</h2>
-          <p className="text-center text-gray-600 mb-12 max-w-2xl mx-auto">
-            The Deanery publishes a transparent summary of parish compliance and community strength without exposing sensitive amounts.
-          </p>
+          <div className="flex flex-col sm:flex-row justify-between items-center mb-8">
+            <div>
+              <h2 className="text-4xl font-bold mb-2 text-gray-800">Public Ledger Snapshot</h2>
+              <p className="text-gray-600 max-w-2xl">
+                The Deanery publishes a transparent summary of parish compliance and community strength without exposing sensitive amounts.
+              </p>
+            </div>
+            <div className="mt-4 sm:mt-0">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Select Financial Year:</label>
+              <select
+                value={selectedYear}
+                onChange={(e) => setSelectedYear(Number(e.target.value))}
+                className="px-4 py-2 border-2 border-blue-700 rounded-lg font-semibold text-blue-700 bg-white hover:bg-blue-50 transition cursor-pointer"
+              >
+                {yearOptions.map((year) => (
+                  <option key={year} value={year}>{year}</option>
+                ))}
+              </select>
+            </div>
+          </div>
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
             <div className="rounded-3xl bg-white p-8 shadow-sm border border-gray-100 text-center">
               <p className="text-sm uppercase tracking-[0.24em] text-gray-400 mb-3">Total Parishes</p>

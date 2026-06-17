@@ -140,32 +140,34 @@ export const publicCheckIn = async (req, res) => {
 
 export const getPublicStats = async (req, res) => {
   try {
-    const currentYear = new Date().getFullYear();
+    const year = parseInt(req.query.year, 10) || new Date().getFullYear();
+    console.log('Querying for year:', year);
+
     const totalLectors = await Lector.countDocuments({ deanery: 'Benin' });
     const totalParishes = await Parish.countDocuments({ zone: 'Benin' });
 
     const feeTypes = await FeeType.find({ active: true }).select('_id name').lean();
     const feeTypeIds = feeTypes.map(type => type._id.toString());
 
-    const feeTargets = await FeeTarget.find({ year: currentYear })
+    const feeTargets = await FeeTarget.find({ year })
       .populate('feeType', 'name')
       .lean();
 
     const targetByFeeTypeId = feeTargets.reduce((acc, target) => {
       const key = String(target.feeType?._id || target.feeType);
-      acc[key] = Number(target.targetAmount) || 0;
+      acc[key] = Number(target.amount) || 0;
       return acc;
     }, {});
 
     const ledgerEntries = await LedgerEntry.aggregate([
-      { $match: { year: currentYear, deanery: 'Benin' } },
+      { $match: { year } },
       {
         $group: {
           _id: {
             parish: '$parish',
             feeType: '$feeType'
           },
-          totalPaid: { $sum: '$amount' }
+          totalPaid: { $sum: '$amountPaid' }
         }
       }
     ]);
@@ -193,8 +195,11 @@ export const getPublicStats = async (req, res) => {
 
     const outstandingParishes = Math.max(0, totalParishes - compliantParishes);
 
+    console.log('Found Compliant:', compliantParishes, 'Outstanding:', outstandingParishes, 'For Year:', year);
+
     res.status(200).json({
       success: true,
+      year,
       data: {
         totalLectors,
         totalParishes,
@@ -203,6 +208,7 @@ export const getPublicStats = async (req, res) => {
       }
     });
   } catch (error) {
+    console.error('Error in getPublicStats:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
