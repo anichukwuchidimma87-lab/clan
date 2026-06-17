@@ -12,6 +12,7 @@ const galleryItemSchema = new mongoose.Schema({
   featured: { type: Boolean, default: false },
   tags: [String],
   uploadedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  publicId: { type: String },
   createdAt: { type: Date, default: Date.now }
 });
 

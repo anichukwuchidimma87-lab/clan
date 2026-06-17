@@ -1,4 +1,5 @@
 import GalleryItem from '../models/GalleryItem.js';
+import { v2 as cloudinary } from 'cloudinary';
 
 const sampleCategory = async (category, size) => {
   const available = await GalleryItem.find({ category });
@@ -31,6 +32,7 @@ export const createGalleryItem = async (req, res) => {
       console.error('[galleryController] Failed to log req.file', e && e.message);
     }
     const uploadedUrl = req.file?.path;
+    const publicId = req.file?.filename || req.file?.public_id || req.file?.publicId;
     const finalUrl = uploadedUrl || url;
 
     if (!finalUrl || !category) {
@@ -44,7 +46,8 @@ export const createGalleryItem = async (req, res) => {
       category,
       featured: featured === true || featured === 'true',
       tags: Array.isArray(tags) ? tags : (typeof tags === 'string' ? tags.split(',').map(tag => tag.trim()) : []),
-      uploadedBy: req.user._id
+      uploadedBy: req.user._id,
+      publicId: publicId || undefined
     });
 
     res.status(201).json({ success: true, data: newItem });
@@ -91,6 +94,25 @@ export const updateGalleryItem = async (req, res) => {
         : String(tags).split(',').map(tag => tag.trim()).filter(Boolean);
     }
 
+    // Handle file replacement when provided via multer upload
+    if (req.file) {
+      const newUrl = req.file.path;
+      const newPublicId = req.file.filename || req.file.public_id || req.file.publicId;
+
+      // If existing item has a publicId, attempt to remove it from Cloudinary to avoid orphaned assets
+      if (item.publicId) {
+        try {
+          await cloudinary.uploader.destroy(item.publicId, { resource_type: 'auto' });
+            console.log('[galleryController] destroyed old Cloudinary asset:', item.publicId);
+        } catch (err) {
+          console.error('[galleryController] Failed to destroy old Cloudinary asset', item.publicId, err && err.message);
+        }
+      }
+
+      item.url = newUrl;
+      item.publicId = newPublicId || item.publicId;
+    }
+
     await item.save();
     res.status(200).json({ success: true, data: item });
   } catch (error) {
@@ -103,6 +125,16 @@ export const deleteGalleryItem = async (req, res) => {
     const item = await GalleryItem.findById(req.params.id);
     if (!item) {
       return res.status(404).json({ success: false, message: 'Gallery item not found.' });
+    }
+
+    // If item has a Cloudinary publicId, attempt to delete the remote asset
+    if (item.publicId) {
+      try {
+        await cloudinary.uploader.destroy(item.publicId, { resource_type: 'auto' });
+      } catch (err) {
+        console.error('[galleryController] Failed to destroy Cloudinary asset for', item.publicId, err && err.message);
+        // continue to remove DB record even if cloudinary deletion fails
+      }
     }
 
     await item.remove();

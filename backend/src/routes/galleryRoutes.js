@@ -7,7 +7,7 @@ const router = express.Router();
 
 router.get('/', protect, authorize('admin', 'superadmin'), getGalleryItems);
 router.post('/', protect, authorize('admin', 'superadmin'), upload.single('file'), createGalleryItem);
-router.put('/:id', protect, authorize('admin', 'superadmin'), updateGalleryItem);
+router.put('/:id', protect, authorize('admin', 'superadmin'), upload.single('file'), updateGalleryItem);
 router.delete('/:id', protect, authorize('admin', 'superadmin'), deleteGalleryItem);
 
 export default router;

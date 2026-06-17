@@ -172,6 +172,7 @@ function GalleryManager({ category, title }) {
   const [error, setError] = useState(null);
   const [editingItemId, setEditingItemId] = useState(null);
   const [editValues, setEditValues] = useState({ title: '', caption: '' });
+  const [editFiles, setEditFiles] = useState({});
 
   const apiRoot = import.meta.env.VITE_API_URL || '';
   const token = localStorage.getItem('clan_token');
@@ -215,7 +216,8 @@ function GalleryManager({ category, title }) {
       });
       const json = await response.json();
       if (json.success) {
-        loadItems();
+        // remove locally to avoid full refresh
+        setItems(prev => prev.filter(i => i._id !== id));
       } else {
         alert(json.message || 'Delete failed.');
       }
@@ -228,6 +230,7 @@ function GalleryManager({ category, title }) {
   const startEditing = (item) => {
     setEditingItemId(item._id);
     setEditValues({ title: item.title || '', caption: item.caption || '' });
+    setEditFiles(prev => ({ ...prev, [item._id]: null }));
   };
 
   const cancelEditing = () => {
@@ -237,18 +240,37 @@ function GalleryManager({ category, title }) {
 
   const saveEdit = async (id) => {
     try {
-      const response = await fetch(`${apiRoot}/api/gallery/${id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify(editValues)
-      });
+      let response;
+      const file = editFiles[id];
+      if (file) {
+        const form = new FormData();
+        form.append('file', file);
+        form.append('title', editValues.title);
+        form.append('caption', editValues.caption);
+        response = await fetch(`${apiRoot}/api/gallery/${id}`, {
+          method: 'PUT',
+          headers: {
+            Authorization: `Bearer ${token}`
+          },
+          body: form
+        });
+      } else {
+        response = await fetch(`${apiRoot}/api/gallery/${id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify(editValues)
+        });
+      }
+
       const json = await response.json();
       if (json.success) {
+        // update local state with returned item if available
+        const updated = json.data;
+        setItems(prev => prev.map(it => (it._id === id ? (updated || { ...it, ...editValues }) : it)));
         cancelEditing();
-        loadItems();
       } else {
         alert(json.message || 'Update failed.');
       }
@@ -307,6 +329,10 @@ function GalleryManager({ category, title }) {
                       onChange={e => setEditValues(prev => ({ ...prev, caption: e.target.value }))}
                       className="w-full rounded-xl border border-slate-200 p-2 min-h-[100px]"
                     />
+                    <div className="mt-3">
+                      <label className="block text-xs uppercase tracking-[0.24em] text-slate-500 mb-1">Replace Image</label>
+                      <input type="file" accept="image/*,video/*" onChange={e => setEditFiles(prev => ({ ...prev, [item._id]: e.target.files[0] }))} />
+                    </div>
                   </>
                 ) : (
                   <>
