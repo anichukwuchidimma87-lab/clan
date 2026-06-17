@@ -24,6 +24,12 @@ const sampleCategory = async (category, size) => {
 export const createGalleryItem = async (req, res) => {
   try {
     const { title, caption, url, category, featured, tags } = req.body;
+    // Debug: log the raw file object set by multer-storage-cloudinary
+    try {
+      console.log('[galleryController] req.file:', req.file ? { originalname: req.file.originalname, path: req.file.path, size: req.file.size } : null);
+    } catch (e) {
+      console.error('[galleryController] Failed to log req.file', e && e.message);
+    }
     const uploadedUrl = req.file?.path;
     const finalUrl = uploadedUrl || url;
 

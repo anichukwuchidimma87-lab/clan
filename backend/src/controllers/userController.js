@@ -43,6 +43,12 @@ export const updateUserProfile = async (req, res) => {
   try {
     const { userId } = req.params;
     const { position, profileTitle } = req.body;
+    // Debug: log file object from multer-storage-cloudinary
+    try {
+      console.log('[userController] req.file:', req.file ? { originalname: req.file.originalname, path: req.file.path, size: req.file.size } : null);
+    } catch (e) {
+      console.error('[userController] Failed to log req.file', e && e.message);
+    }
     const profileImage = req.file?.path; // Cloudinary URL from multer
 
     const user = await User.findById(userId);
