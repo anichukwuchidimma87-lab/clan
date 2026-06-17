@@ -8,6 +8,7 @@ export default function FinancialLedger() {
   const [feeTypes, setFeeTypes] = useState([]);
   const [entries, setEntries] = useState([]);
   const [totals, setTotals] = useState({ grandTotal: 0 });
+  const [summary, setSummary] = useState({ totalParishes: 0, compliantParishes: 0, outstandingParishes: 0 });
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
   const [userRole, setUserRole] = useState('member');
   const [searchQuery, setSearchQuery] = useState('');
@@ -57,6 +58,7 @@ export default function FinancialLedger() {
         setFeeTypes(result.data.feeTypes || []);
         setEntries(result.data.entries || []);
         setTotals(result.data.totals || { grandTotal: 0 });
+        setSummary(result.data.summary || { totalParishes: 0, compliantParishes: 0, outstandingParishes: 0 });
         setEditTargets(
           (result.data.feeTypes || []).reduce((acc, feeType) => {
             acc[feeType._id] = feeType.targetAmount || 0;
@@ -220,7 +222,20 @@ export default function FinancialLedger() {
         </div>
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
           <div className="flex items-center gap-2 border rounded-lg px-3 py-2 bg-gray-50">
-            <span className="text-gray-500 font-bold">Year:</span>
+            <label htmlFor="yearSelect" className="text-gray-500 font-bold">Year:</label>
+            <select
+              id="yearSelect"
+              className="border border-gray-200 rounded-lg px-2 py-1 text-xs font-bold bg-white"
+              value={currentYear}
+              onChange={(e) => setCurrentYear(Number(e.target.value) || new Date().getFullYear())}
+            >
+              {yearOptions.map((year) => (
+                <option key={year} value={year}>{year}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-center gap-2 border rounded-lg px-3 py-2 bg-gray-50">
+            <span className="text-gray-500 font-bold">Custom year</span>
             <input
               type="number"
               min="2000"
@@ -257,6 +272,21 @@ export default function FinancialLedger() {
             <div className="rounded-2xl border border-indigo-100 bg-indigo-950 p-4 text-white">
               <p className="text-[10px] uppercase tracking-[0.28em] text-indigo-300 mb-1">Grand Year Total</p>
               <p className="text-xl font-black">₦{totals.grandTotal.toLocaleString()}</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4">
+            <div className="rounded-2xl border border-slate-200 bg-emerald-50 p-4">
+              <p className="text-[10px] uppercase tracking-[0.28em] text-emerald-700 mb-1">Total Parishes</p>
+              <p className="text-2xl font-black text-emerald-900">{summary.totalParishes}</p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-emerald-100 p-4">
+              <p className="text-[10px] uppercase tracking-[0.28em] text-emerald-800 mb-1">Compliant Parishes</p>
+              <p className="text-2xl font-black text-emerald-900">{summary.compliantParishes}</p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-rose-100 p-4">
+              <p className="text-[10px] uppercase tracking-[0.28em] text-rose-700 mb-1">Outstanding Parishes</p>
+              <p className="text-2xl font-black text-rose-900">{summary.outstandingParishes}</p>
             </div>
           </div>
         </div>

@@ -8,6 +8,8 @@ import lectorRoutes from './routes/lectorRoutes.js'; // 1. Imported your lector 
 import publicRoutes from './routes/publicRoutes.js';
 import galleryRoutes from './routes/galleryRoutes.js';
 import userRoutes from './routes/userRoutes.js';
+import { protect } from './middleware/authMiddleware.js';
+import { getLedgerSummary } from './controllers/financeController.js';
 
 const app = express();
 
@@ -33,6 +35,7 @@ app.use('/api/v1/attendance', attendanceRoutes);
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/parishes', parishRoutes); 
 app.use('/api/finance', financeRoutes);
+app.get('/api/ledger/summary', protect, getLedgerSummary);
 app.use('/api/v1/users', userRoutes);
 app.use('/api/public', publicRoutes);
 app.use('/api/gallery', galleryRoutes);

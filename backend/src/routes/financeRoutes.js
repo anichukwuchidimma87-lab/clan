@@ -1,6 +1,7 @@
 import express from 'express';
 import {
   getLedger,
+  getLedgerSummary,
   upsertLedgerEntry,
   getFeeTypes,
   createFeeType,
@@ -12,6 +13,7 @@ import { protect, authorize } from '../middleware/authMiddleware.js';
 const router = express.Router();
 
 router.get('/ledger', protect, getLedger);
+router.get('/ledger/summary', protect, getLedgerSummary);
 router.get('/fee-types', protect, authorize('superadmin', 'admin'), getFeeTypes);
 router.post('/fee-types', protect, authorize('superadmin', 'admin'), createFeeType);
 router.put('/fee-types/:id', protect, authorize('superadmin', 'admin'), updateFeeType);
