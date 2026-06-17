@@ -74,6 +74,30 @@ export const getGalleryItems = async (req, res) => {
   }
 };
 
+export const updateGalleryItem = async (req, res) => {
+  try {
+    const { title, caption, featured, tags } = req.body;
+    const item = await GalleryItem.findById(req.params.id);
+    if (!item) {
+      return res.status(404).json({ success: false, message: 'Gallery item not found.' });
+    }
+
+    if (typeof title === 'string') item.title = title.trim();
+    if (typeof caption === 'string') item.caption = caption.trim();
+    if (typeof featured !== 'undefined') item.featured = featured === 'true' || featured === true;
+    if (typeof tags !== 'undefined') {
+      item.tags = Array.isArray(tags)
+        ? tags.map(tag => String(tag).trim()).filter(Boolean)
+        : String(tags).split(',').map(tag => tag.trim()).filter(Boolean);
+    }
+
+    await item.save();
+    res.status(200).json({ success: true, data: item });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 export const deleteGalleryItem = async (req, res) => {
   try {
     const item = await GalleryItem.findById(req.params.id);

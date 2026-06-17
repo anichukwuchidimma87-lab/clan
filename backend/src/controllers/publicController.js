@@ -1,4 +1,5 @@
 import User from '../models/User.js';
+import GalleryItem from '../models/GalleryItem.js';
 
 /**
  * Get all executives and leadership team members
@@ -75,6 +76,30 @@ export const getLeadershipProfiles = async (req, res) => {
     res.status(200).json({
       success: true,
       data: organized,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+export const getGalleryByCategory = async (req, res) => {
+  try {
+    const { category, limit } = req.query;
+    if (!category) {
+      return res.status(400).json({ success: false, message: 'A gallery category is required.' });
+    }
+
+    const items = await GalleryItem.find({ category })
+      .sort({ createdAt: -1 })
+      .limit(Number(limit) || 12);
+
+    res.status(200).json({
+      success: true,
+      count: items.length,
+      data: items,
     });
   } catch (error) {
     res.status(500).json({

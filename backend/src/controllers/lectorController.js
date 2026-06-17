@@ -1,6 +1,9 @@
 import Lector from '../models/Lector.js';
 import Parish from '../models/Parish.js';
 import Finance from '../models/Finance.js';
+import FeeType from '../models/FeeType.js';
+import FeeTarget from '../models/FeeTarget.js';
+import LedgerEntry from '../models/LedgerEntry.js';
 
 // HELPER PUBLIC ENDPOINT: Feeds the dynamic check-in page dropdown safely from master registry records
 export const getActiveParishList = async (req, res) => {
@@ -137,27 +140,64 @@ export const publicCheckIn = async (req, res) => {
 
 export const getPublicStats = async (req, res) => {
   try {
+    const currentYear = new Date().getFullYear();
     const totalLectors = await Lector.countDocuments({ deanery: 'Benin' });
     const totalParishes = await Parish.countDocuments({ zone: 'Benin' });
-    const parishLedgerCount = await Finance.countDocuments({ deanery: 'Benin' });
-    const outstandingParishes = await Finance.countDocuments({
-      deanery: 'Benin',
-      $expr: {
-        $or: [
-          { $lt: ['$duesPaidAmount', '$duesPrice'] },
-          { $lt: ['$seminarPaidAmount', '$seminarPrice'] },
-          { $lt: ['$competitionPaidAmount', '$competitionPrice'] }
-        ]
+
+    const feeTypes = await FeeType.find({ active: true }).select('_id name').lean();
+    const feeTypeIds = feeTypes.map(type => type._id.toString());
+
+    const feeTargets = await FeeTarget.find({ year: currentYear })
+      .populate('feeType', 'name')
+      .lean();
+
+    const targetByFeeTypeId = feeTargets.reduce((acc, target) => {
+      const key = String(target.feeType?._id || target.feeType);
+      acc[key] = Number(target.targetAmount) || 0;
+      return acc;
+    }, {});
+
+    const ledgerEntries = await LedgerEntry.aggregate([
+      { $match: { year: currentYear, deanery: 'Benin' } },
+      {
+        $group: {
+          _id: {
+            parish: '$parish',
+            feeType: '$feeType'
+          },
+          totalPaid: { $sum: '$amount' }
+        }
       }
-    });
-    const compliantParishes = Math.max(0, parishLedgerCount - outstandingParishes);
+    ]);
+
+    const paymentsByParish = ledgerEntries.reduce((acc, entry) => {
+      const parishId = String(entry._id.parish);
+      const feeTypeId = String(entry._id.feeType);
+      if (!acc[parishId]) acc[parishId] = {};
+      acc[parishId][feeTypeId] = Number(entry.totalPaid) || 0;
+      return acc;
+    }, {});
+
+    const parishDocs = await Parish.find({ zone: 'Benin' }).select('_id').lean();
+    const compliantParishes = parishDocs.reduce((count, parish) => {
+      const parishPayments = paymentsByParish[String(parish._id)] || {};
+
+      const hasClearedAll = feeTypeIds.every((feeTypeId) => {
+        const requiredAmount = targetByFeeTypeId[feeTypeId] ?? 0;
+        const paidAmount = parishPayments[feeTypeId] ?? 0;
+        return paidAmount >= requiredAmount;
+      });
+
+      return hasClearedAll ? count + 1 : count;
+    }, 0);
+
+    const outstandingParishes = Math.max(0, totalParishes - compliantParishes);
 
     res.status(200).json({
       success: true,
       data: {
         totalLectors,
         totalParishes,
-        parishLedgerCount,
         compliantParishes,
         outstandingParishes
       }

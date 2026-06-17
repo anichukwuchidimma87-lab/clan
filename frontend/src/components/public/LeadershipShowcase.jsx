@@ -3,15 +3,18 @@ import axios from 'axios';
 
 function LeadershipShowcase() {
   const [leadership, setLeadership] = useState({ executives: [], patrons: [] });
+  const [galleryItems, setGalleryItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
+    const apiRoot = import.meta.env.VITE_API_URL || '';
+
     const fetchLeadership = async () => {
       try {
         setLoading(true);
-        const response = await axios.get(`${import.meta.env.VITE_API_URL}/public/leadership`);
-        setLeadership(response.data.data);
+        const response = await axios.get(`${apiRoot}/api/public/leadership`);
+        setLeadership(response.data.data || { executives: [], patrons: [] });
         setError(null);
       } catch (err) {
         console.error('Error fetching leadership profiles:', err);
@@ -22,7 +25,20 @@ function LeadershipShowcase() {
       }
     };
 
+    const fetchExecutiveGallery = async () => {
+      try {
+        const response = await axios.get(`${apiRoot}/api/public/gallery?category=executives`);
+        console.log('Executive gallery fetch response:', response.data);
+        if (response.data?.success) {
+          setGalleryItems(response.data.data || []);
+        }
+      } catch (err) {
+        console.error('Error fetching executives gallery items:', err);
+      }
+    };
+
     fetchLeadership();
+    fetchExecutiveGallery();
   }, []);
 
   if (loading) {
@@ -33,7 +49,7 @@ function LeadershipShowcase() {
     );
   }
 
-  if (error) {
+  if (error && galleryItems.length === 0) {
     return (
       <div className="text-center py-12 text-red-600">
         <p>{error}</p>
@@ -106,9 +122,28 @@ function LeadershipShowcase() {
       )}
 
       {/* No Leadership Message */}
-      {leadership.executives.length === 0 && leadership.patrons.length === 0 && (
+      {leadership.executives.length === 0 && leadership.patrons.length === 0 && galleryItems.length === 0 && (
         <div className="text-center py-8 text-gray-500">
           <p>Leadership profiles coming soon</p>
+        </div>
+      )}
+
+      {galleryItems.length > 0 && (leadership.executives.length === 0 && leadership.patrons.length === 0) && (
+        <div>
+          <h3 className="text-2xl font-bold text-gray-800 mb-6">Executive Gallery</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {galleryItems.map((item) => (
+              <div key={item._id} className="bg-white rounded-lg shadow-lg overflow-hidden">
+                <div className="relative h-56 bg-gray-200 overflow-hidden">
+                  <img src={item.url || item.imageUrl || item.fileUrl} alt={item.title || 'Executive image'} className="w-full h-full object-cover" />
+                </div>
+                <div className="p-4">
+                  <h3 className="text-lg font-semibold text-gray-800">{item.title || 'Executive feature'}</h3>
+                  <p className="mt-2 text-sm text-gray-600">{item.caption || 'Executive gallery item'}</p>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>

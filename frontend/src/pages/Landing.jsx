@@ -19,6 +19,7 @@ function Landing() {
       try {
         setLoadingGallery(true);
         const response = await axios.get(`${apiRoot}/api/public/random-gallery`);
+        console.log('Public random gallery response:', response.data);
         setGalleryItems(response.data.data || []);
       } catch (error) {
         console.error('Could not fetch gallery items:', error);
@@ -32,6 +33,7 @@ function Landing() {
       try {
         setLoadingSummary(true);
         const response = await axios.get(`${apiRoot}/api/public/stats`);
+        console.log('Public ledger stats response:', response.data);
         setFinancialSummary(response.data.data || null);
       } catch (error) {
         console.error('Could not fetch public ledger summary:', error);

@@ -3,7 +3,8 @@ import { getPublicStats } from '../controllers/lectorController.js';
 import { 
   getExecutives, 
   getPatrons, 
-  getLeadershipProfiles
+  getLeadershipProfiles,
+  getGalleryByCategory
 } from '../controllers/publicController.js';
 import { getRandomGallery, getRecentGallery } from '../controllers/galleryController.js';
 
@@ -16,6 +17,9 @@ router.get('/stats', getPublicStats);
 router.get('/executives', getExecutives);
 router.get('/patrons', getPatrons);
 router.get('/leadership', getLeadershipProfiles);
+
+// Gallery category endpoint for public leadership and executive content
+router.get('/gallery', getGalleryByCategory);
 
 // Dynamic gallery endpoints
 router.get('/random-gallery', getRandomGallery);
