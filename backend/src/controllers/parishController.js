@@ -92,3 +92,37 @@ export const getParishMembers = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
+export const getParishesWithCounts = async (req, res) => {
+  try {
+    // Aggregate parishes with lector counts using a $lookup with pipeline
+    const items = await Parish.aggregate([
+      { $sort: { name: 1 } },
+      {
+        $lookup: {
+          from: 'lectors',
+          let: { pid: '$_id', pname: '$name' },
+          pipeline: [
+            { $match: { $expr: { $or: [ { $and: [ { $ne: ['$$pid', null] }, { $eq: ['$parish', '$$pid'] } ] }, { $eq: ['$parishName', '$$pname'] } ] } } },
+            { $project: { _id: 1 } }
+          ],
+          as: 'lectors'
+        }
+      },
+      {
+        $project: {
+          name: 1,
+          zone: 1,
+          createdAt: 1,
+          updatedAt: 1,
+          lectorCount: { $size: '$lectors' }
+        }
+      }
+    ]).exec();
+
+    res.status(200).json({ success: true, count: items.length, data: items });
+  } catch (error) {
+    console.error('[parishController] getParishesWithCounts error:', error && error.message);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};

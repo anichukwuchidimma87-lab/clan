@@ -80,7 +80,7 @@ export default function RegistryManagement() {
       setLoading(true);
       const [membersRes, parishesRes] = await Promise.all([
         fetch(`https://clan-3slh.onrender.com/api/lectors/registry?limit=20&page=1&search=${encodeURIComponent(searchQuery)}`, { headers: { Authorization: `Bearer ${token}` } }),
-        fetch('https://clan-3slh.onrender.com/api/v1/parishes', { headers })
+        fetch('https://clan-3slh.onrender.com/api/v1/parishes/with-counts', { headers })
       ]);
 
       const membersJson = await membersRes.json();
@@ -100,7 +100,8 @@ export default function RegistryManagement() {
       }
 
       if (parishesJson.success) {
-        setParishes(parishesJson.data);
+        // backend now returns lectorCount on each parish
+        setParishes(parishesJson.data.map(p => ({ ...p, lectorCount: p.lectorCount || 0 })));
         if (!formState.parishId && parishesJson.data.length > 0) {
           setFormState(prev => ({ ...prev, parishId: parishesJson.data[0]._id }));
         }
@@ -406,7 +407,7 @@ export default function RegistryManagement() {
                     </thead>
                     <tbody>
                       {filteredParishes.map(parish => {
-                        const memberCount = members.filter(m => (m.parish && m.parish._id === parish._id) || m.parishName === parish.name).length;
+                        const memberCount = parish.lectorCount || 0;
                         return (
                           <tr key={parish._id} className="border-t border-slate-100 hover:bg-slate-50">
                             <td className="px-4 py-4">{parish.name}</td>
