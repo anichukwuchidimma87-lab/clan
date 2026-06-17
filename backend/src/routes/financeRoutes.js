@@ -1,13 +1,21 @@
 import express from 'express';
-import { getLedger, addParish, bulkUploadLedger, recordPayment, updateLedgerFees } from '../controllers/financeController.js';
+import {
+  getLedger,
+  upsertLedgerEntry,
+  getFeeTypes,
+  createFeeType,
+  updateFeeType,
+  upsertFeeTarget
+} from '../controllers/financeController.js';
 import { protect, authorize } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
 router.get('/ledger', protect, getLedger);
-router.post('/parish', protect, authorize('superadmin', 'admin'), addParish);
-router.post('/bulk-upload', protect, authorize('superadmin', 'admin'), bulkUploadLedger);
-router.put('/ledger/pay/:id', protect, authorize('superadmin', 'admin'), recordPayment); // New payment logging endpoint
-router.put('/ledger/fees/:id', protect, authorize('superadmin', 'admin'), updateLedgerFees);
+router.get('/fee-types', protect, authorize('superadmin', 'admin'), getFeeTypes);
+router.post('/fee-types', protect, authorize('superadmin', 'admin'), createFeeType);
+router.put('/fee-types/:id', protect, authorize('superadmin', 'admin'), updateFeeType);
+router.put('/fee-targets', protect, authorize('superadmin', 'admin'), upsertFeeTarget);
+router.put('/ledger/entry', protect, authorize('superadmin', 'admin'), upsertLedgerEntry);
 
 export default router;

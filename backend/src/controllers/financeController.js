@@ -1,185 +1,191 @@
-import Finance from '../models/Finance.js';
 import Parish from '../models/Parish.js';
+import FeeType from '../models/FeeType.js';
+import FeeTarget from '../models/FeeTarget.js';
+import LedgerEntry from '../models/LedgerEntry.js';
 
-// Get ledger report with calculated exact partial metrics balances populated directly from Registry
+const slugify = (value = '') =>
+  value
+    .toString()
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9-]/g, '')
+    .replace(/--+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
 export const getLedger = async (req, res) => {
   try {
-    const year = parseInt(req.query.year) || new Date().getFullYear();
-    
-    // Finds finance files and deep populates the true name and zone straight from Registry collections
-    const ledger = await Finance.find({ year, deanery: 'Benin' }).populate('parish', 'name zone');
-    
-    let totalDuesCollected = 0;
-    let totalSeminarCollected = 0;
-    let totalCompetitionCollected = 0;
+    const year = parseInt(req.query.year, 10) || new Date().getFullYear();
 
-    ledger.forEach(item => {
-      totalDuesCollected += item.duesPaidAmount;
-      totalSeminarCollected += item.seminarPaidAmount;
-      totalCompetitionCollected += item.competitionPaidAmount;
+    const [parishes, feeTypes, targets, entries] = await Promise.all([
+      Parish.find().sort({ name: 1 }).lean(),
+      FeeType.find({ active: true }).sort({ name: 1 }).lean(),
+      FeeTarget.find({ year }).lean(),
+      LedgerEntry.find({ year }).lean()
+    ]);
+
+    const targetMap = new Map(targets.map(target => [String(target.feeType), target]));
+
+    const totals = feeTypes.reduce((acc, feeType) => ({
+      ...acc,
+      [feeType.slug]: 0
+    }), { grandTotal: 0 });
+
+    entries.forEach(entry => {
+      const feeType = feeTypes.find(type => String(type._id) === String(entry.feeType));
+      if (!feeType) return;
+      totals[feeType.slug] = (totals[feeType.slug] || 0) + entry.amountPaid;
+      totals.grandTotal += entry.amountPaid;
     });
 
     res.status(200).json({
       success: true,
-      totals: {
-        dues: totalDuesCollected,
-        seminar: totalSeminarCollected,
-        competition: totalCompetitionCollected,
-        grandTotal: totalDuesCollected + totalSeminarCollected + totalCompetitionCollected
-      },
-      data: ledger
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-};
-
-// Log a dynamic payment installment receipt entry
-export const recordPayment = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { category, amount } = req.body; 
-    const adminName = req.user.name; 
-
-    const paymentNum = Number(amount);
-    if (isNaN(paymentNum) || paymentNum <= 0) {
-      return res.status(400).json({ success: false, message: "Invalid payment amount value" });
-    }
-
-    const record = await Finance.findById(id);
-    if (!record) {
-      return res.status(404).json({ success: false, message: "Parish ledger sheet not found" });
-    }
-
-    if (category === 'dues') record.duesPaidAmount += paymentNum;
-    if (category === 'seminar') record.seminarPaidAmount += paymentNum;
-    if (category === 'competition') record.competitionPaidAmount += paymentNum;
-
-    record.paymentHistory.push({
-      amount: paymentNum,
-      category,
-      recordedBy: adminName,
-      datePaid: new Date()
-    });
-
-    await record.save();
-    res.status(200).json({ success: true, data: record });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-};
-
-// Standard individual parish ledger row manual constructor
-export const addParish = async (req, res) => {
-  try {
-    const { parishName, year, duesPrice, seminarPrice, competitionPrice } = req.body;
-    const targetYear = parseInt(year, 10) || new Date().getFullYear();
-
-    if (!parishName || !parishName.trim()) {
-      return res.status(400).json({ success: false, message: 'A valid parish name is required.' });
-    }
-
-    const masterParish = await Parish.findOne({ name: parishName.trim() });
-    if (!masterParish) {
-      return res.status(400).json({ success: false, message: 'This parish does not exist in the centralized registry. Create it from the parish directory first.' });
-    }
-
-    const existing = await Finance.findOne({ parish: masterParish._id, year: targetYear });
-    if (existing) return res.status(400).json({ success: false, message: 'Parish year profile sheet already active.' });
-
-    const newParish = await Finance.create({
-      parish: masterParish._id,
-      parishName: masterParish.name,
-      deanery: 'Benin',
-      year: targetYear,
-      duesPrice: Number(duesPrice) || 5000,
-      seminarPrice: Number(seminarPrice) || 2500,
-      competitionPrice: Number(competitionPrice) || 5000
-    });
-
-    res.status(201).json({ success: true, data: newParish });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-};
-
-// Bulk spreadsheet finance ledger loader mapped to relational references
-export const bulkUploadLedger = async (req, res) => {
-  try {
-    const { records } = req.body;
-    let uploadCount = 0;
-    const missingParishes = new Set();
-
-    for (const record of records) {
-      if (!record.parishName) continue;
-
-      const parishName = String(record.parishName).trim();
-      const masterParish = await Parish.findOne({ name: parishName });
-      if (!masterParish) {
-        missingParishes.add(parishName);
-        continue;
+      year,
+      data: {
+        parishes,
+        feeTypes: feeTypes.map(feeType => ({
+          ...feeType,
+          targetAmount: targetMap.has(String(feeType._id)) ? targetMap.get(String(feeType._id)).amount : 0
+        })),
+        entries,
+        totals
       }
-
-      const targetYear = Number(record.year) || new Date().getFullYear();
-
-      // Upsert financial details tied directly to the MongoDB Object ID reference
-      await Finance.updateOne(
-        { parish: masterParish._id, year: targetYear },
-        {
-          $setOnInsert: {
-            parishName: masterParish.name,
-            deanery: 'Benin',
-            duesPrice: Number(record.duesPrice) || 5000,
-            seminarPrice: Number(record.seminarPrice) || 2500,
-            competitionPrice: Number(record.competitionPrice) || 5000,
-            duesPaidAmount: Number(record.duesPaidAmount) || 0,
-            seminarPaidAmount: Number(record.seminarPaidAmount) || 0,
-            competitionPaidAmount: Number(record.competitionPaidAmount) || 0
-          }
-        },
-        { upsert: true }
-      );
-      uploadCount++;
-    }
-
-    const response = {
-      success: true,
-      message: `Successfully updated financial tracks for ${uploadCount} records.`
-    };
-
-    if (missingParishes.size > 0) {
-      response.note = `The following parishes were skipped because they are not present in the centralized parish registry: ${[...missingParishes].join(', ')}.`;
-    }
-
-    res.status(200).json(response);
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 };
 
-export const updateLedgerFees = async (req, res) => {
+export const upsertLedgerEntry = async (req, res) => {
+  try {
+    const { year, parishId, feeTypeId, amountPaid } = req.body;
+    const parsedYear = Number(year) || new Date().getFullYear();
+    const parsedAmount = Number(amountPaid);
+
+    if (!parishId || !feeTypeId) {
+      return res.status(400).json({ success: false, message: 'Year, parishId, and feeTypeId are required.' });
+    }
+
+    if (Number.isNaN(parsedAmount) || parsedAmount < 0) {
+      return res.status(400).json({ success: false, message: 'Amount paid must be a non-negative number.' });
+    }
+
+    const parish = await Parish.findById(parishId);
+    if (!parish) {
+      return res.status(404).json({ success: false, message: 'Parish not found in the registry.' });
+    }
+
+    const feeType = await FeeType.findById(feeTypeId);
+    if (!feeType || !feeType.active) {
+      return res.status(404).json({ success: false, message: 'Fee type not found or is inactive.' });
+    }
+
+    const entry = await LedgerEntry.findOneAndUpdate(
+      { parish: parishId, feeType: feeTypeId, year: parsedYear },
+      { $set: { amountPaid: parsedAmount } },
+      { new: true, upsert: true, setDefaultsOnInsert: true }
+    );
+
+    res.status(200).json({ success: true, data: entry });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const getFeeTypes = async (req, res) => {
+  try {
+    const feeTypes = await FeeType.find().sort({ name: 1 }).lean();
+    res.status(200).json({ success: true, data: feeTypes });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const createFeeType = async (req, res) => {
+  try {
+    const { name, targetAmount, year } = req.body;
+    if (!name || !name.trim()) {
+      return res.status(400).json({ success: false, message: 'Fee type name is required.' });
+    }
+
+    const slug = slugify(name);
+    const existing = await FeeType.findOne({ slug });
+    if (existing) {
+      return res.status(400).json({ success: false, message: 'A fee type with this name already exists.' });
+    }
+
+    const feeType = await FeeType.create({ name: name.trim(), slug, active: true });
+
+    if (year && typeof targetAmount !== 'undefined') {
+      await FeeTarget.findOneAndUpdate(
+        { feeType: feeType._id, year: Number(year) },
+        { $set: { amount: Number(targetAmount) || 0 } },
+        { upsert: true, new: true }
+      );
+    }
+
+    res.status(201).json({ success: true, data: feeType });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const updateFeeType = async (req, res) => {
   try {
     const { id } = req.params;
-    const { duesPrice, seminarPrice, competitionPrice } = req.body;
-    const parsedDues = Number(duesPrice);
-    const parsedSeminar = Number(seminarPrice);
-    const parsedCompetition = Number(competitionPrice);
-
-    if ([parsedDues, parsedSeminar, parsedCompetition].some(value => Number.isNaN(value) || value < 0)) {
-      return res.status(400).json({ success: false, message: 'Fee values must be valid non-negative numbers.' });
+    const { name, active } = req.body;
+    const feeType = await FeeType.findById(id);
+    if (!feeType) {
+      return res.status(404).json({ success: false, message: 'Fee type not found.' });
     }
 
-    const record = await Finance.findById(id);
-    if (!record) {
-      return res.status(404).json({ success: false, message: 'Ledger record not found.' });
+    if (name && name.trim()) {
+      const slug = slugify(name);
+      const existing = await FeeType.findOne({ slug, _id: { $ne: id } });
+      if (existing) {
+        return res.status(400).json({ success: false, message: 'Another fee type with this name exists.' });
+      }
+      feeType.name = name.trim();
+      feeType.slug = slug;
     }
 
-    record.duesPrice = parsedDues;
-    record.seminarPrice = parsedSeminar;
-    record.competitionPrice = parsedCompetition;
-    await record.save();
+    if (typeof active === 'boolean') {
+      feeType.active = active;
+    }
 
-    res.status(200).json({ success: true, data: record });
+    await feeType.save();
+    res.status(200).json({ success: true, data: feeType });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const upsertFeeTarget = async (req, res) => {
+  try {
+    const { feeTypeId, year, amount } = req.body;
+    const parsedYear = Number(year) || new Date().getFullYear();
+    const parsedAmount = Number(amount);
+
+    if (!feeTypeId) {
+      return res.status(400).json({ success: false, message: 'feeTypeId is required.' });
+    }
+
+    if (Number.isNaN(parsedAmount) || parsedAmount < 0) {
+      return res.status(400).json({ success: false, message: 'Target amount must be a non-negative number.' });
+    }
+
+    const feeType = await FeeType.findById(feeTypeId);
+    if (!feeType) {
+      return res.status(404).json({ success: false, message: 'Fee type not found.' });
+    }
+
+    const target = await FeeTarget.findOneAndUpdate(
+      { feeType: feeTypeId, year: parsedYear },
+      { $set: { amount: parsedAmount } },
+      { upsert: true, new: true }
+    );
+
+    res.status(200).json({ success: true, data: target });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
