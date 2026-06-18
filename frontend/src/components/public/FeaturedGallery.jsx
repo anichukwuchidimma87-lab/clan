@@ -8,7 +8,7 @@ function FeaturedGallery({ items }) {
   const slides = useMemo(() => {
     if (!items || !items.length) return [];
 
-    const eventChronicleCategories = ['seminar', 'orphanage', 'voalc', 'events', 'awardees'];
+    const eventChronicleCategories = ['voalc', 'seminar', 'orphanage', 'events', 'awardees'];
     const categoryGroups = items.reduce((acc, item) => {
       const category = item.category || 'uncategorized';
       acc[category] = acc[category] || [];
@@ -24,17 +24,19 @@ function FeaturedGallery({ items }) {
   }, [items]);
 
   const slideCount = slides.length;
+  const previousIndex = slideCount > 0 ? (currentIndex - 1 + slideCount) % slideCount : 0;
+  const nextIndex = slideCount > 0 ? (currentIndex + 1) % slideCount : 0;
 
   useEffect(() => {
     if (!slideCount) return undefined;
 
-    const interval = window.setInterval(() => {
+    const intervalId = window.setInterval(() => {
       if (!isPaused) {
         setCurrentIndex((prevIndex) => (prevIndex + 1) % slideCount);
       }
     }, 3000);
 
-    return () => window.clearInterval(interval);
+    return () => window.clearInterval(intervalId);
   }, [slideCount, isPaused]);
 
   useEffect(() => {
@@ -43,12 +45,16 @@ function FeaturedGallery({ items }) {
     }
   }, [currentIndex, slideCount]);
 
+  const handleChangeIndex = (index) => {
+    setCurrentIndex(index);
+  };
+
   const handlePrev = () => {
-    setCurrentIndex((prevIndex) => (prevIndex - 1 + slideCount) % slideCount);
+    handleChangeIndex(previousIndex);
   };
 
   const handleNext = () => {
-    setCurrentIndex((prevIndex) => (prevIndex + 1) % slideCount);
+    handleChangeIndex(nextIndex);
   };
 
   const openLightbox = (item) => {
@@ -76,50 +82,86 @@ function FeaturedGallery({ items }) {
   return (
     <div className="relative overflow-hidden rounded-[2rem] border border-gray-200 bg-white shadow-sm">
       <div
-        className="relative h-[28rem] bg-slate-100"
+        className="relative h-[33rem] overflow-hidden bg-slate-100 px-4 py-8 md:px-8"
         onMouseEnter={() => setIsPaused(true)}
         onMouseLeave={() => setIsPaused(false)}
       >
-        {slides.map((item, index) => (
-          <div
-            key={`${item._id}-${index}`}
-            className={`absolute inset-0 flex flex-col items-center justify-center px-4 py-6 transition-all duration-700 ease-out ${index === currentIndex ? 'opacity-100 translate-x-0 z-20' : 'opacity-0 translate-x-4 z-10'}`}
-            style={{ transitionProperty: 'opacity, transform' }}
-          >
+        {slides.map((item, index) => {
+          const isCenter = index === currentIndex;
+          const isLeft = index === previousIndex;
+          const isRight = index === nextIndex;
+          const commonClasses = 'absolute top-1/2 transition-all duration-700 ease-in-out';
+
+          let positionClasses = 'opacity-0 scale-95 pointer-events-none';
+          let widthClass = 'w-[20rem]';
+
+          if (isCenter) {
+            positionClasses = 'left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-100 z-20 scale-100';
+            widthClass = 'w-[58%] md:w-[54%]';
+          } else if (isLeft) {
+            positionClasses = 'left-0 top-1/2 -translate-y-1/2 -translate-x-[-15%] opacity-80 z-10 scale-90';
+            widthClass = 'w-[30%] md:w-[28%]';
+          } else if (isRight) {
+            positionClasses = 'right-0 top-1/2 -translate-y-1/2 translate-x-[15%] opacity-80 z-10 scale-90';
+            widthClass = 'w-[30%] md:w-[28%]';
+          }
+
+          return (
             <button
+              key={`${item._id}-${index}`}
               type="button"
-              className="absolute left-4 top-1/2 z-30 -translate-y-1/2 rounded-full bg-black/30 p-3 text-white hover:bg-black/50 focus:outline-none"
-              onClick={handlePrev}
-              aria-label="Previous slide"
+              onClick={isCenter ? () => openLightbox(item) : () => handleChangeIndex(index)}
+              className={`${commonClasses} ${positionClasses} ${widthClass} rounded-[2rem] border border-slate-200 bg-white shadow-xl focus:outline-none ${isCenter ? 'cursor-zoom-in' : 'cursor-pointer hover:opacity-100'} overflow-hidden`}
+              aria-label={isCenter ? 'Open image lightbox' : `Move carousel to ${item.title || item.category}`}
             >
-              ‹
+              <div className="relative h-full overflow-hidden rounded-[2rem] bg-slate-100">
+                <img
+                  src={item.url}
+                  alt={item.title || item.caption || item.category}
+                  className="h-full w-full object-contain bg-transparent"
+                  loading="lazy"
+                />
+                <div className="absolute left-4 top-4 rounded-full bg-black/60 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-white">
+                  {item.category}
+                </div>
+              </div>
+              <div className="p-4 text-left">
+                {item.title && <h3 className="truncate text-lg font-semibold text-slate-900">{item.title}</h3>}
+                <p className="mt-2 text-sm leading-6 text-slate-600 max-h-20 overflow-hidden">
+                  {item.caption || 'Premium community highlight.'}
+                </p>
+              </div>
             </button>
-            <button
-              type="button"
-              className="absolute right-4 top-1/2 z-30 -translate-y-1/2 rounded-full bg-black/30 p-3 text-white hover:bg-black/50 focus:outline-none"
-              onClick={handleNext}
-              aria-label="Next slide"
-            >
-              ›
-            </button>
-            <div
-              className="relative flex h-full w-full max-w-6xl items-center justify-center overflow-hidden rounded-[2rem] bg-slate-100 shadow-lg"
-              onClick={() => openLightbox(item)}
-            >
-              <img
-                src={item.url}
-                alt={item.title || item.caption || item.category}
-                className="h-full w-full object-contain bg-transparent"
-                loading="lazy"
-              />
-            </div>
-            <div className="mt-6 w-full max-w-6xl text-center">
-              {item.title && <h3 className="text-2xl font-semibold text-gray-900">{item.title}</h3>}
-              <p className="mt-3 text-sm leading-7 text-gray-600">
-                {item.caption || 'Click the image to view it full screen with title and details.'}
-              </p>
-            </div>
-          </div>
+          );
+        })}
+
+        <button
+          type="button"
+          onClick={handlePrev}
+          className="absolute left-4 top-1/2 z-30 -translate-y-1/2 rounded-full bg-white/90 p-3 text-xl text-slate-800 shadow-md transition hover:bg-white"
+          aria-label="Previous"
+        >
+          ‹
+        </button>
+        <button
+          type="button"
+          onClick={handleNext}
+          className="absolute right-4 top-1/2 z-30 -translate-y-1/2 rounded-full bg-white/90 p-3 text-xl text-slate-800 shadow-md transition hover:bg-white"
+          aria-label="Next"
+        >
+          ›
+        </button>
+      </div>
+
+      <div className="flex items-center justify-center gap-2 py-5">
+        {slides.map((_, index) => (
+          <button
+            key={`dot-${index}`}
+            type="button"
+            onClick={() => handleChangeIndex(index)}
+            className={`h-3 w-3 rounded-full transition-all duration-300 ${index === currentIndex ? 'bg-slate-900 w-6' : 'bg-slate-300 hover:bg-slate-400'}`}
+            aria-label={`Go to slide ${index + 1}`}
+          />
         ))}
       </div>
 
