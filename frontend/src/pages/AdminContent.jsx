@@ -7,6 +7,9 @@ function EventManager() {
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({ title: '', description: '', date: '', location: '', coverImage: '' });
+  const [bulkText, setBulkText] = useState('');
+  const [bulkLoading, setBulkLoading] = useState(false);
+  const [bulkError, setBulkError] = useState('');
   const apiRoot = import.meta.env.VITE_API_URL || '';
   const token = localStorage.getItem('clan_token');
 
@@ -54,6 +57,38 @@ function EventManager() {
     } catch (err) { console.error('Delete event error', err); }
   };
 
+  const handleBulkImport = async () => {
+    if (!bulkText.trim()) {
+      setBulkError('Enter JSON or CSV data to import.');
+      return;
+    }
+    setBulkLoading(true);
+    setBulkError('');
+    try {
+      const res = await fetch(`${apiRoot}/api/events/bulk-import`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ rawData: bulkText })
+      });
+      const json = await res.json();
+      if (json.success) {
+        setBulkText('');
+        load();
+        alert(`Imported ${json.count} events successfully.`);
+      } else {
+        setBulkError(json.message || 'Bulk import failed.');
+      }
+    } catch (err) {
+      console.error('Bulk import error', err);
+      setBulkError('Unable to import events.');
+    } finally {
+      setBulkLoading(false);
+    }
+  };
+
   const copyCaption = (ev) => {
     const text = generateCaption(ev);
     navigator.clipboard.writeText(text).then(() => alert('Announcement copied to clipboard.'))
@@ -86,6 +121,15 @@ function EventManager() {
               {editing && <button type="button" onClick={()=>{setEditing(null); setForm({ title: '', description: '', date: '', location: '', coverImage: '' });}} className="border px-3 py-2 rounded">Cancel</button>}
             </div>
           </form>
+          <div className="rounded-3xl border border-slate-200 p-4 bg-slate-50 mt-4">
+            <h3 className="text-base font-semibold text-slate-900 mb-3">Bulk Event Import</h3>
+            <p className="text-sm text-slate-600 mb-3">Paste a JSON array or CSV text with columns <span className="font-semibold">title, date, description, venue</span>.</p>
+            <textarea value={bulkText} onChange={e => setBulkText(e.target.value)} rows={8} className="w-full border p-3 rounded resize-none" placeholder='JSON: [{"title":"Seminar","date":"2026-07-15T10:00","description":"...","venue":"St. Mary"}]\nCSV: title,date,description,venue'></textarea>
+            {bulkError && <p className="text-rose-600 text-sm mt-2">{bulkError}</p>}
+            <button onClick={handleBulkImport} type="button" disabled={bulkLoading} className="mt-3 rounded-full bg-emerald-600 text-white px-4 py-2 hover:bg-emerald-700 transition">
+              {bulkLoading ? 'Importing…' : 'Import Event Batch'}
+            </button>
+          </div>
         </div>
         <div>
           {loading ? <div>Loading…</div> : (

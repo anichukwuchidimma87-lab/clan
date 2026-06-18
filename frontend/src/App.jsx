@@ -10,6 +10,7 @@ import Users from './pages/Users';
 import AdminControl from './pages/AdminControl';
 import AdminContent from './pages/AdminContent';
 import Settings from './pages/Settings';
+import EventCalendar from './pages/EventCalendar';
 
 function App() {
   return (
@@ -34,6 +35,7 @@ function App() {
         <Route path="/users" element={<Users />} /> {/* USER ACCESS MANAGEMENT: For approving new users */}
         <Route path="/admin/control" element={<AdminControl />} />
         <Route path="/admin/content/:section" element={<AdminContent />} />
+        <Route path="/events" element={<EventCalendar />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

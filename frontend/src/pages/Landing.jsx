@@ -80,14 +80,17 @@ function Landing() {
       {/* Hero Section */}
       <HeroSection />
 
-      {/* Leadership Showcase Section */}
+      {/* Community Events Section */}
+      <CommunityEvents />
+
+      {/* Featured Gallery Section */}
       <section className="py-16 bg-white">
         <div className="max-w-7xl mx-auto px-4">
-          <h2 className="text-4xl font-bold text-center mb-4 text-gray-800">Leadership Team</h2>
+          <h2 className="text-4xl font-bold text-center mb-4 text-gray-800">Live Community Gallery</h2>
           <p className="text-center text-gray-600 mb-12 max-w-2xl mx-auto">
-            Meet the visionary leaders and patrons guiding the CLAN Benin Deanery toward greater heights of service and spiritual growth.
+            Every refresh brings a new combination of leadership, award, event, and community images pulled straight from the gallery engine.
           </p>
-          <LeadershipShowcase />
+          <FeaturedGallery items={loadingGallery ? [] : galleryItems} />
         </div>
       </section>
 
@@ -135,17 +138,14 @@ function Landing() {
         </div>
       </section>
 
-      {/* Community Events Widget */}
-      <CommunityEvents />
-
-      {/* Featured Gallery Section */}
+      {/* Leadership Showcase Section */}
       <section className="py-16 bg-white">
         <div className="max-w-7xl mx-auto px-4">
-          <h2 className="text-4xl font-bold text-center mb-4 text-gray-800">Live Community Gallery</h2>
+          <h2 className="text-4xl font-bold text-center mb-4 text-gray-800">Leadership Team</h2>
           <p className="text-center text-gray-600 mb-12 max-w-2xl mx-auto">
-            Every refresh brings a new combination of leadership, award, event, and community images pulled straight from the gallery engine.
+            Meet the visionary leaders and patrons guiding the CLAN Benin Deanery toward greater heights of service and spiritual growth.
           </p>
-          <FeaturedGallery items={loadingGallery ? [] : galleryItems} />
+          <LeadershipShowcase />
         </div>
       </section>
 

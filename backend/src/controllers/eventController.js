@@ -66,6 +66,16 @@ export const getUpcomingEvents = async (req, res) => {
   }
 };
 
+export const getPublicEvents = async (req, res) => {
+  try {
+    const events = await Event.find().sort({ date: 1 });
+    res.status(200).json({ success: true, count: events.length, data: events });
+  } catch (error) {
+    console.error('[eventController] getPublicEvents error:', error && error.message);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 export const toggleEventStatus = async (req, res) => {
   try {
     const { id } = req.params;
@@ -93,6 +103,68 @@ export const generateCaption = async (req, res) => {
     res.status(200).json({ success: true, data: { caption } });
   } catch (error) {
     console.error('[eventController] generateCaption error:', error && error.message);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+const parseCsvEvents = (raw) => {
+  const lines = raw.trim().split(/\r?\n/).filter(Boolean);
+  if (lines.length < 2) return [];
+  const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+  return lines.slice(1).map(line => {
+    const values = line.split(',').map(v => v.trim());
+    const item = {};
+    headers.forEach((header, index) => {
+      if (header === 'venue' || header === 'location') {
+        item.location = values[index] || '';
+      } else if (header === 'title' || header === 'date' || header === 'description' || header === 'coverimage' || header === 'cover_image') {
+        item[header === 'cover_image' ? 'coverImage' : header] = values[index] || '';
+      }
+    });
+    return item;
+  });
+};
+
+export const bulkImportEvents = async (req, res) => {
+  try {
+    let records = [];
+    if (Array.isArray(req.body.items)) {
+      records = req.body.items;
+    } else if (typeof req.body.rawData === 'string') {
+      const raw = req.body.rawData.trim();
+      try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          records = parsed;
+        }
+      } catch (jsonErr) {
+        records = parseCsvEvents(raw);
+      }
+    } else {
+      return res.status(400).json({ success: false, message: 'Provide items array or rawData string in JSON/CSV format.' });
+    }
+
+    if (!records.length) {
+      return res.status(400).json({ success: false, message: 'No valid event records found.' });
+    }
+
+    const normalized = records.map(item => ({
+      title: (item.title || item.name || '').trim(),
+      description: item.description || item.desc || '',
+      date: item.date ? new Date(item.date) : null,
+      location: item.venue || item.location || '',
+      status: item.status || 'Upcoming',
+      coverImage: item.coverImage || item.cover_image || ''
+    })).filter(item => item.title && item.date && !Number.isNaN(item.date.getTime()));
+
+    if (!normalized.length) {
+      return res.status(400).json({ success: false, message: 'No valid events after parsing. Ensure title and date fields are present.' });
+    }
+
+    const created = await Event.insertMany(normalized);
+    res.status(201).json({ success: true, count: created.length, data: created });
+  } catch (error) {
+    console.error('[eventController] bulkImportEvents error:', error && error.message);
     res.status(500).json({ success: false, message: error.message });
   }
 };
