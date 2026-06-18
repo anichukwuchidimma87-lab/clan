@@ -6,6 +6,7 @@ import {
   deleteEvent,
   getEvents,
   getUpcomingEvents,
+  getPublicEvents,
   toggleEventStatus,
   generateCaption,
   bulkImportEvents
