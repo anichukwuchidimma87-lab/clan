@@ -147,31 +147,27 @@ export const deleteGalleryItem = async (req, res) => {
 
 export const getRandomGallery = async (req, res) => {
   try {
-    const gallery = {
-      executives: await sampleCategory('executives', 3),
-      events: await sampleCategory('events', 3),
-      all: await sampleCategory('', 3),
-    };
+    const eventChronicleCategories = ['seminar', 'orphanage', 'voalc', 'events', 'awardees'];
+    const allPromises = [
+      ...eventChronicleCategories.map((category) => sampleCategory(category, 2)),
+      sampleCategory('executives', 3),
+    ];
+
+    const results = await Promise.all(allPromises);
+    const eventChronicleItems = results.slice(0, eventChronicleCategories.length).flat();
+    const executiveItems = results[eventChronicleCategories.length];
 
     const payload = [
-      ...gallery.executives,
-      ...gallery.events,
-      ...gallery.all,
+      ...eventChronicleItems,
+      ...executiveItems,
     ].filter(Boolean);
-
-    // Shuffle the combined result for a varied glide experience
-    const shuffled = payload
-      .map((item) => ({ item, sortKey: Math.random() }))
-      .sort((a, b) => a.sortKey - b.sortKey)
-      .map(({ item }) => item);
 
     res.status(200).json({
       success: true,
-      data: shuffled,
+      data: payload,
       breakdown: {
-        executives: gallery.executives.length,
-        events: gallery.events.length,
-        all: gallery.all.length,
+        eventChronicleCount: eventChronicleItems.length,
+        executiveCount: executiveItems.length,
       }
     });
   } catch (error) {
