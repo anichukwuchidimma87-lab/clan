@@ -1,10 +1,126 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
+import generateCaption from '../utils/generateCaption';
+
+function EventManager() {
+  const [events, setEvents] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState(null);
+  const [form, setForm] = useState({ title: '', description: '', date: '', location: '', coverImage: '' });
+  const apiRoot = import.meta.env.VITE_API_URL || '';
+  const token = localStorage.getItem('clan_token');
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${apiRoot}/api/events`, { headers: { Authorization: `Bearer ${token}` } });
+      const json = await res.json();
+      if (json.success) setEvents(json.data || []);
+    } catch (err) {
+      console.error('EventManager load error', err);
+    } finally { setLoading(false); }
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const save = async (e) => {
+    e.preventDefault();
+    try {
+      const method = editing ? 'PATCH' : 'POST';
+      const url = editing ? `${apiRoot}/api/events/${editing._id}` : `${apiRoot}/api/events`;
+      const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify(form) });
+      const json = await res.json();
+      if (json.success) { setForm({ title: '', description: '', date: '', location: '', coverImage: '' }); setEditing(null); load(); }
+      else alert(json.message || 'Save failed');
+    } catch (err) { console.error(err); alert('Save error'); }
+  };
+
+  const startEdit = (ev) => { setEditing(ev); setForm({ title: ev.title, description: ev.description, date: new Date(ev.date).toISOString().slice(0,16), location: ev.location, coverImage: ev.coverImage }); };
+
+  const toggle = async (id) => {
+    try {
+      const res = await fetch(`${apiRoot}/api/events/${id}/toggle`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+      const json = await res.json();
+      if (json.success) setEvents(prev => prev.map(p => p._id === id ? json.data : p));
+    } catch (err) { console.error('Toggle error', err); }
+  };
+
+  const del = async (id) => {
+    if (!window.confirm('Delete this event?')) return;
+    try {
+      const res = await fetch(`${apiRoot}/api/events/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+      const json = await res.json();
+      if (json.success) setEvents(prev => prev.filter(p => p._id !== id));
+    } catch (err) { console.error('Delete event error', err); }
+  };
+
+  const copyCaption = (ev) => {
+    const text = generateCaption(ev);
+    navigator.clipboard.writeText(text).then(() => alert('Announcement copied to clipboard.'))
+      .catch(() => alert('Unable to copy to clipboard.'));
+  };
+
+  const genCaptionServer = async (id) => {
+    try {
+      const res = await fetch(`${apiRoot}/api/events/${id}/generate-caption`, { headers: { Authorization: `Bearer ${token}` } });
+      const json = await res.json();
+      if (json.success && json.data) { navigator.clipboard.writeText(json.data.caption); alert('Server-generated caption copied.'); }
+    } catch (err) { console.error('Generate caption error', err); }
+  };
+
+  return (
+    <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-xl font-semibold">Event Manager</h2>
+        <button onClick={load} className="rounded-full border px-3 py-1">Refresh</button>
+      </div>
+      <div className="grid md:grid-cols-2 gap-6">
+        <div>
+          <form onSubmit={save} className="space-y-3">
+            <input placeholder="Title" value={form.title} onChange={e=>setForm(prev=>({...prev,title:e.target.value}))} className="w-full border p-2 rounded" required />
+            <textarea placeholder="Description" value={form.description} onChange={e=>setForm(prev=>({...prev,description:e.target.value}))} className="w-full border p-2 rounded" />
+            <input type="datetime-local" value={form.date} onChange={e=>setForm(prev=>({...prev,date:e.target.value}))} className="w-full border p-2 rounded" required />
+            <input placeholder="Location" value={form.location} onChange={e=>setForm(prev=>({...prev,location:e.target.value}))} className="w-full border p-2 rounded" />
+            <div className="flex gap-2">
+              <button type="submit" className="bg-indigo-600 text-white px-4 py-2 rounded">{editing ? 'Save' : 'Create'}</button>
+              {editing && <button type="button" onClick={()=>{setEditing(null); setForm({ title: '', description: '', date: '', location: '', coverImage: '' });}} className="border px-3 py-2 rounded">Cancel</button>}
+            </div>
+          </form>
+        </div>
+        <div>
+          {loading ? <div>Loading…</div> : (
+            <div className="space-y-3">
+              {events.map(ev => (
+                <div key={ev._id} className="p-3 border rounded flex items-start justify-between bg-slate-50">
+                  <div>
+                    <div className="flex items-center gap-3">
+                      <h3 className="font-semibold">{ev.title}</h3>
+                      <span className="text-xs text-gray-500">{new Date(ev.date).toLocaleString()}</span>
+                    </div>
+                    <p className="text-sm text-slate-600">{ev.location}</p>
+                  </div>
+                  <div className="flex flex-col items-end gap-2">
+                    <button onClick={()=>startEdit(ev)} className="text-sm px-2 py-1 border rounded">Edit</button>
+                    <button onClick={()=>toggle(ev._id)} className="text-sm px-2 py-1 border rounded">{ev.status==='Upcoming'?'Mark Completed':'Mark Upcoming'}</button>
+                    <button onClick={()=>copyCaption(ev)} title="Copy caption" className="text-sm px-2 py-1 border rounded">Notify</button>
+                    <button onClick={()=>genCaptionServer(ev._id)} title="Generate caption (server)" className="text-sm px-2 py-1 border rounded">Generate Announcement</button>
+                    <button onClick={()=>del(ev._id)} className="text-sm px-2 py-1 border rounded text-rose-600">Delete</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 const sectionTitles = {
   'executives-gallery': 'Executives Gallery',
   'patrons-gallery': 'Patronage Gallery',
   'event-chronicles': 'Event Chronicles',
+  'event-manager': 'Event Manager',
   'orphanage-visitations': 'Orphanage Visitations',
   'awards-recognition': 'Awards & Recognition',
   'voalc': 'VOALC Gallery'
@@ -18,6 +134,7 @@ export default function AdminContent() {
     'executives-gallery': 'executives',
     'patrons-gallery': 'patrons',
     'event-chronicles': 'events',
+    'event-manager': 'events',
     'orphanage-visitations': 'orphanage',
     'awards-recognition': 'awardees',
     'voalc': 'voalc'
@@ -55,7 +172,9 @@ export default function AdminContent() {
           </div>
         </div>
 
-        {currentCategory ? (
+        {section === 'event-manager' ? (
+          <EventManager />
+        ) : currentCategory ? (
           <GalleryManager category={currentCategory} title={title} />
         ) : (
           <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-8">

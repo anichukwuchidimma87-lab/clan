@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import HeroSection from '../components/public/HeroSection';
 import LeadershipShowcase from '../components/public/LeadershipShowcase';
 import FeaturedGallery from '../components/public/FeaturedGallery';
+import CommunityEvents from '../components/public/CommunityEvents';
 
 function Landing() {
   const navigate = useNavigate();
@@ -133,6 +134,9 @@ function Landing() {
           </div>
         </div>
       </section>
+
+      {/* Community Events Widget */}
+      <CommunityEvents />
 
       {/* Featured Gallery Section */}
       <section className="py-16 bg-white">
