@@ -1,3 +1,30 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+.gallery-marquee {
+  overflow: hidden;
+  position: relative;
+}
+
+.gallery-marquee__track {
+  display: flex;
+  gap: 1.25rem;
+  width: max-content;
+  animation: gallery-scroll 40s linear infinite;
+  will-change: transform;
+}
+
+.gallery-marquee__slide {
+  min-width: 20rem;
+  flex: 0 0 20rem;
+}
+
+@keyframes gallery-scroll {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}

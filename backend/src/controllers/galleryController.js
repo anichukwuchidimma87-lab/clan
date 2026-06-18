@@ -2,7 +2,8 @@ import GalleryItem from '../models/GalleryItem.js';
 import { v2 as cloudinary } from 'cloudinary';
 
 const sampleCategory = async (category, size) => {
-  const available = await GalleryItem.find({ category });
+  const filter = category ? { category } : {};
+  const available = await GalleryItem.find(filter);
   if (!available.length) return [];
   if (available.length <= size) {
     return available.sort(() => Math.random() - 0.5);
@@ -147,33 +148,30 @@ export const deleteGalleryItem = async (req, res) => {
 export const getRandomGallery = async (req, res) => {
   try {
     const gallery = {
-      seminar: await sampleCategory('seminar', 5),
-      voalc: await sampleCategory('voalc', 2),
-      awardees: await sampleCategory('awardees', 2),
-      orphanage: await sampleCategory('orphanage', 2),
-      patrons: await sampleCategory('patrons', 2),
       executives: await sampleCategory('executives', 3),
+      events: await sampleCategory('events', 3),
+      all: await sampleCategory('', 3),
     };
 
     const payload = [
-      ...gallery.seminar,
-      ...gallery.voalc,
-      ...gallery.awardees,
-      ...gallery.orphanage,
-      ...gallery.patrons,
       ...gallery.executives,
-    ];
+      ...gallery.events,
+      ...gallery.all,
+    ].filter(Boolean);
+
+    // Shuffle the combined result for a varied glide experience
+    const shuffled = payload
+      .map((item) => ({ item, sortKey: Math.random() }))
+      .sort((a, b) => a.sortKey - b.sortKey)
+      .map(({ item }) => item);
 
     res.status(200).json({
       success: true,
-      data: payload,
+      data: shuffled,
       breakdown: {
-        seminar: gallery.seminar.length,
-        voalc: gallery.voalc.length,
-        awardees: gallery.awardees.length,
-        orphanage: gallery.orphanage.length,
-        patrons: gallery.patrons.length,
         executives: gallery.executives.length,
+        events: gallery.events.length,
+        all: gallery.all.length,
       }
     });
   } catch (error) {
