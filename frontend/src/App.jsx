@@ -1,9 +1,13 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import Header from './components/public/Header';
 import Landing from './pages/Landing';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import FinancialLedger from './pages/FinancialLedger';
+import Financials from './pages/Financials';
+import GalleryCategory from './pages/GalleryCategory';
+import Leadership from './pages/Leadership';
 import CheckIn from './pages/CheckIn'; // Public submission form
 import RegistryManagement from './pages/RegistryManagement';
 import Users from './pages/Users';
@@ -15,10 +19,14 @@ import EventCalendar from './pages/EventCalendar';
 function App() {
   return (
     <Router>
+      <Header />
       <Routes>
         {/* Public Landing Page */}
         <Route path="/" element={<Landing />} />
-        
+        <Route path="/financials" element={<Financials />} />
+        <Route path="/gallery/:category" element={<GalleryCategory />} />
+        <Route path="/leadership" element={<Leadership />} />
+
         {/* Authentication Routes */}
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />

@@ -34,7 +34,7 @@ function FeaturedGallery({ items }) {
       if (!isPaused) {
         setCurrentIndex((prevIndex) => (prevIndex + 1) % slideCount);
       }
-    }, 3000);
+    }, 4500);
 
     return () => window.clearInterval(intervalId);
   }, [slideCount, isPaused]);
@@ -94,10 +94,11 @@ function FeaturedGallery({ items }) {
 
           let positionClasses = 'opacity-0 scale-95 pointer-events-none';
           let widthClass = 'w-[20rem]';
+          const visibilityClass = isCenter ? '' : 'hidden md:block';
 
           if (isCenter) {
             positionClasses = 'left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-100 z-20 scale-100';
-            widthClass = 'w-[58%] md:w-[54%]';
+            widthClass = 'w-full md:w-[58%]';
           } else if (isLeft) {
             positionClasses = 'left-0 top-1/2 -translate-y-1/2 -translate-x-[-15%] opacity-80 z-10 scale-90';
             widthClass = 'w-[30%] md:w-[28%]';
@@ -111,7 +112,7 @@ function FeaturedGallery({ items }) {
               key={`${item._id}-${index}`}
               type="button"
               onClick={isCenter ? () => openLightbox(item) : () => handleChangeIndex(index)}
-              className={`${commonClasses} ${positionClasses} ${widthClass} rounded-[2rem] border border-slate-200 bg-white shadow-xl focus:outline-none ${isCenter ? 'cursor-zoom-in' : 'cursor-pointer hover:opacity-100'} overflow-hidden`}
+              className={`${commonClasses} ${positionClasses} ${widthClass} ${visibilityClass} rounded-[2rem] border border-slate-200 bg-white shadow-xl focus:outline-none ${isCenter ? 'cursor-zoom-in' : 'cursor-pointer hover:opacity-100'} overflow-hidden`}
               aria-label={isCenter ? 'Open image lightbox' : `Move carousel to ${item.title || item.category}`}
             >
               <div className="relative h-full overflow-hidden rounded-[2rem] bg-slate-100">
