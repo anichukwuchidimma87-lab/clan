@@ -219,8 +219,10 @@ export const getRegistryData = async (req, res) => {
   try {
     const { role, parish } = req.user;
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
-    const limit = Math.min(100, Math.max(10, parseInt(req.query.limit, 10) || 20));
+    const requestedLimit = parseInt(req.query.limit, 10) || 20;
+    const limit = Math.min(1000, Math.max(10, requestedLimit));
     const search = req.query.search ? String(req.query.search).trim() : '';
+    const status = req.query.status ? String(req.query.status).trim() : 'all';
 
     const buildSearchFilter = () => {
       if (!search) return {};
@@ -241,6 +243,10 @@ export const getRegistryData = async (req, res) => {
         ...buildSearchFilter()
       };
 
+      if (status && status !== 'all') {
+        filter.status = status;
+      }
+
       const totalCount = await Lector.countDocuments(filter);
       const lectors = await Lector.find(filter)
         .populate('parish', 'name zone')
@@ -255,7 +261,8 @@ export const getRegistryData = async (req, res) => {
         limit,
         totalCount,
         totalPages: Math.ceil(totalCount / limit),
-        data: lectors
+        data: lectors,
+        status: status === 'all' ? 'all' : status
       });
     }
 
@@ -272,6 +279,11 @@ export const getRegistryData = async (req, res) => {
         roleInParish: { $ne: 'Active Member' },
         ...sharedSearch
       };
+
+      if (status && status !== 'all') {
+        ownParishFilter.status = status;
+        otherParishFilter.status = status;
+      }
 
       const ownParishLectors = await Lector.find(ownParishFilter).populate('parish', 'name zone');
       const otherParishExecutives = await Lector.find(otherParishFilter).populate('parish', 'name zone');

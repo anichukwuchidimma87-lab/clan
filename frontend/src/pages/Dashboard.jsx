@@ -125,10 +125,10 @@ export default function Dashboard() {
 
       try {
         const leadershipData = await safeFetch(`${apiBase}/api/public/leadership`);
-        const featuredMembers = leadershipData?.data?.featuredExecutives || leadershipData?.data?.executives || [];
+        const allMembers = leadershipData?.data?.executives || [];
 
-        if (leadershipData.success && featuredMembers.length > 0) {
-          setExecutiveCouncil(featuredMembers.slice(0, 3).map((member) => ({
+        if (leadershipData.success && allMembers.length > 0) {
+          setExecutiveCouncil(allMembers.map((member) => ({
             name: member.name,
             role: member.position || 'Executive Member',
             parish: member.profileTitle || member.parish || 'Deanery Executive'
@@ -228,7 +228,7 @@ export default function Dashboard() {
 
           <section className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-5">
             <div className="border-b pb-3">
-              <h2 className="text-lg font-black text-gray-900 tracking-tight flex items-center gap-2"><span>👥</span> Benin City Deanery Lectors Executive Council</h2>
+              <h2 className="text-lg font-black text-gray-900 tracking-tight flex items-center gap-2"><span>👥</span> Benin City General Electors Executive Council</h2>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {(executiveCouncil.length > 0 ? executiveCouncil : fallbackExecutives).map((exec, index) => (

@@ -6,6 +6,7 @@ function LeadershipShowcase() {
   const [galleryItems, setGalleryItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [showAllExecutives, setShowAllExecutives] = useState(false);
 
   useEffect(() => {
     const apiRoot = import.meta.env.VITE_API_URL || '';
@@ -40,7 +41,9 @@ function LeadershipShowcase() {
     fetchExecutiveGallery();
   }, []);
 
-  const visibleExecutives = leadership.featuredExecutives?.length ? leadership.featuredExecutives : leadership.executives.slice(0, 3);
+  const allExecutives = leadership.executives || [];
+  const visibleExecutives = showAllExecutives ? allExecutives : allExecutives.slice(0, 6);
+  const canExpandExecutives = allExecutives.length > 6;
 
   if (loading) {
     return (
@@ -93,22 +96,22 @@ function LeadershipShowcase() {
 
   return (
     <div className="space-y-12">
-      {visibleExecutives.length > 0 && (
+      {allExecutives.length > 0 && (
         <div>
-          <h3 className="text-2xl font-bold text-gray-800 mb-6">Featured Contact Leaders</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {visibleExecutives.slice(0, 3).map((member) => (
-              <LeadershipCard key={member._id} member={member} />
-            ))}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+            <h3 className="text-2xl font-bold text-gray-800">Leadership Team</h3>
+            {canExpandExecutives && (
+              <button
+                type="button"
+                onClick={() => setShowAllExecutives((current) => !current)}
+                className="inline-flex items-center justify-center rounded-full border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700 transition hover:bg-blue-100"
+              >
+                {showAllExecutives ? 'View less' : 'View more'}
+              </button>
+            )}
           </div>
-        </div>
-      )}
-
-      {leadership.executives.length > 0 && !leadership.featuredExecutives?.length && visibleExecutives.length === 0 && (
-        <div>
-          <h3 className="text-2xl font-bold text-gray-800 mb-6">Executive Members</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {leadership.executives.slice(0, 3).map((member) => (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {visibleExecutives.map((member) => (
               <LeadershipCard key={member._id} member={member} />
             ))}
           </div>
@@ -126,13 +129,13 @@ function LeadershipShowcase() {
         </div>
       )}
 
-      {visibleExecutives.length === 0 && leadership.patrons.length === 0 && galleryItems.length === 0 && (
+      {allExecutives.length === 0 && leadership.patrons.length === 0 && galleryItems.length === 0 && (
         <div className="text-center py-8 text-gray-500">
           <p>Leadership profiles coming soon</p>
         </div>
       )}
 
-      {galleryItems.length > 0 && visibleExecutives.length === 0 && leadership.patrons.length === 0 && (
+      {galleryItems.length > 0 && allExecutives.length === 0 && leadership.patrons.length === 0 && (
         <div>
           <h3 className="text-2xl font-bold text-gray-800 mb-6">Executive Gallery</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

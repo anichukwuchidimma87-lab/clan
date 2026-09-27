@@ -89,8 +89,9 @@ export default function RegistryManagement() {
   const fetchData = async () => {
     try {
       setLoading(true);
+      const statusParam = statusFilter === 'all' ? 'all' : statusFilter;
       const [membersRes, parishesRes] = await Promise.all([
-        fetch(`https://clan-3slh.onrender.com/api/lectors/registry?limit=20&page=1&search=${encodeURIComponent(searchQuery)}`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`https://clan-3slh.onrender.com/api/lectors/registry?limit=1000&page=1&search=${encodeURIComponent(searchQuery)}&status=${encodeURIComponent(statusParam)}`, { headers: { Authorization: `Bearer ${token}` } }),
         fetch('https://clan-3slh.onrender.com/api/v1/parishes/with-counts', { headers })
       ]);
 
@@ -141,10 +142,17 @@ export default function RegistryManagement() {
     return () => clearTimeout(t);
   }, [searchQuery]);
 
+  useEffect(() => {
+    if (activeTab === 'lectors') {
+      handleSearch();
+    }
+  }, [statusFilter]);
+
   const handleSearch = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`https://clan-3slh.onrender.com/api/lectors/registry?limit=20&page=1&search=${encodeURIComponent(searchQuery)}`, { headers: { Authorization: `Bearer ${token}` } });
+      const statusParam = statusFilter === 'all' ? 'all' : statusFilter;
+      const res = await fetch(`https://clan-3slh.onrender.com/api/lectors/registry?limit=1000&page=1&search=${encodeURIComponent(searchQuery)}&status=${encodeURIComponent(statusParam)}`, { headers: { Authorization: `Bearer ${token}` } });
       const json = await res.json();
       if (json.success) {
         const potentialTotal = json.total || json.totalLectors || json.count || json.totalCount || (json.meta && json.meta.total) || null;
@@ -170,9 +178,10 @@ export default function RegistryManagement() {
   const loadMore = async () => {
     if (page >= totalPages) return;
     const next = page + 1;
+    const statusParam = statusFilter === 'all' ? 'all' : statusFilter;
     setLoadingMore(true);
     try {
-      const res = await fetch(`https://clan-3slh.onrender.com/api/lectors/registry?limit=20&page=${next}&search=${encodeURIComponent(searchQuery)}`, { headers: { Authorization: `Bearer ${token}` } });
+      const res = await fetch(`https://clan-3slh.onrender.com/api/lectors/registry?limit=1000&page=${next}&search=${encodeURIComponent(searchQuery)}&status=${encodeURIComponent(statusParam)}`, { headers: { Authorization: `Bearer ${token}` } });
       const json = await res.json();
       if (json.success && json.scope === 'all') {
         const potentialTotal = json.total || json.totalLectors || json.count || json.totalCount || (json.meta && json.meta.total) || null;
