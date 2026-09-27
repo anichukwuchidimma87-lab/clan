@@ -4,6 +4,7 @@ import Finance from '../models/Finance.js';
 import FeeType from '../models/FeeType.js';
 import FeeTarget from '../models/FeeTarget.js';
 import LedgerEntry from '../models/LedgerEntry.js';
+import AuditLog from '../models/AuditLog.js';
 
 // HELPER PUBLIC ENDPOINT: Feeds the dynamic check-in page dropdown safely from master registry records
 export const getActiveParishList = async (req, res) => {
@@ -341,6 +342,47 @@ export const deleteLector = async (req, res) => {
     await Lector.findByIdAndDelete(id);
     res.status(200).json({ success: true, message: "Deleted successfully." });
   } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// BULK UNSUSPEND
+export const bulkUnsuspend = async (req, res) => {
+  try {
+    const { ids, allSuspended } = req.body;
+    const { role } = req.user;
+
+    // If requesting to unsuspend all suspended records, restrict to superadmin
+    if (allSuspended) {
+      if (role !== 'superadmin') {
+        return res.status(403).json({ success: false, message: 'Only superadmin may unsuspend all records.' });
+      }
+      const result = await Lector.updateMany({ status: 'Suspended' }, { $set: { status: 'Active' } });
+      const modified = result.modifiedCount || result.nModified || 0;
+      try {
+        await AuditLog.create({ action: 'bulk-unsuspend', user: req.user?._id, userRole: role, affectedCount: modified, ids: [], all: true, notes: 'Unsuspend all suspended requested via admin UI' });
+      } catch (e) {
+        console.error('Audit log create failed:', e);
+      }
+      return res.status(200).json({ success: true, modifiedCount: modified });
+    }
+
+    // Otherwise, expect an array of ids to unsuspend (executives allowed)
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ success: false, message: 'No ids provided for bulk unsuspend.' });
+    }
+
+    const objectIds = ids.map(id => id);
+    const result = await Lector.updateMany({ _id: { $in: objectIds }, status: 'Suspended' }, { $set: { status: 'Active' } });
+    const modified = result.modifiedCount || result.nModified || 0;
+    try {
+      await AuditLog.create({ action: 'bulk-unsuspend', user: req.user?._id, userRole: role, affectedCount: modified, ids: objectIds, all: false, notes: 'Unsuspend selected via admin UI' });
+    } catch (e) {
+      console.error('Audit log create failed:', e);
+    }
+    return res.status(200).json({ success: true, modifiedCount: modified });
+  } catch (error) {
+    console.error('bulkUnsuspend error:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 };

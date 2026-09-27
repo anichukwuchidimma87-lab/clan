@@ -5,9 +5,10 @@ import {
   updateLector, 
   deleteLector, 
   getActiveParishList, 
-  bulkUploadParishes   
+  bulkUploadParishes,
+  bulkUnsuspend
 } from '../controllers/lectorController.js';
-import { protect } from '../middleware/authMiddleware.js'; // Changed verifyToken to protect
+import { protect, authorizeApproval } from '../middleware/authMiddleware.js'; // protect + role helpers
 
 const router = express.Router();
 
@@ -20,5 +21,6 @@ router.get('/registry', protect, getRegistryData);
 router.post('/parishes/bulk-upload', protect, bulkUploadParishes);
 router.put('/update/:id', protect, updateLector);
 router.delete('/delete/:id', protect, deleteLector);
+router.post('/bulk-unsuspend', protect, authorizeApproval, bulkUnsuspend);
 
 export default router;

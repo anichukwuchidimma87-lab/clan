@@ -383,6 +383,77 @@ export default function RegistryManagement() {
     setAlertMessage({ type: 'success', text: 'Selected rows exported successfully.' });
   };
 
+  const bulkUnsuspendSelected = async () => {
+    if (!selectedRows.length) {
+      setAlertMessage({ type: 'error', text: 'Select at least one suspended member to unsuspend.' });
+      return;
+    }
+
+    if (!window.confirm(`Unsuspend ${selectedRows.length} selected member(s)? This will set their status to Active.`)) return;
+
+    try {
+      const res = await fetch('https://clan-3slh.onrender.com/api/lectors/bulk-unsuspend', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: selectedRows })
+      });
+      const json = await res.json();
+      if (json.success) {
+        setAlertMessage({ type: 'success', text: `Unsuspended ${json.modifiedCount || 0} member(s).` });
+        clearSelection();
+        fetchData();
+      } else {
+        setAlertMessage({ type: 'error', text: json.message || 'Unable to unsuspend selected members.' });
+      }
+    } catch (err) {
+      console.error('Bulk unsuspend failed', err);
+      setAlertMessage({ type: 'error', text: 'Network error while unsuspending members.' });
+    }
+  };
+
+  const unsuspendAllSuspended = async () => {
+    const confirmText = window.prompt('Type UNSUSPEND to confirm unsuspending ALL suspended records. This action is irreversible.');
+    if (confirmText !== 'UNSUSPEND') {
+      setAlertMessage({ type: 'error', text: 'Confirmation phrase not matched. Action cancelled.' });
+      return;
+    }
+
+    try {
+      const res = await fetch('https://clan-3slh.onrender.com/api/lectors/bulk-unsuspend', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ allSuspended: true })
+      });
+      const json = await res.json();
+      if (json.success) {
+        setAlertMessage({ type: 'success', text: `Unsuspended ${json.modifiedCount || 0} member(s).` });
+        clearSelection();
+        fetchData();
+      } else {
+        setAlertMessage({ type: 'error', text: json.message || 'Unable to unsuspend all members.' });
+      }
+    } catch (err) {
+      console.error('Unsuspend all failed', err);
+      setAlertMessage({ type: 'error', text: 'Network error while unsuspending all members.' });
+    }
+  };
+
+  const selectSuspendedInView = () => {
+    const suspended = members.filter(m => (m.status || 'Active') === 'Suspended');
+    if (!suspended.length) {
+      setAlertMessage({ type: 'error', text: 'There are no suspended members in the current dataset.' });
+      return;
+    }
+    setSelectedRows(suspended.map(m => m._id));
+    setAlertMessage({ type: 'success', text: `Selected ${suspended.length} suspended member(s).` });
+  };
+
+  const viewSuspended = () => {
+    setStatusFilter('Suspended');
+    setCurrentPage(1);
+    setAlertMessage({ type: 'info', text: 'Filtered to Suspended members for review.' });
+  };
+
   const exportCsv = () => {
     const rows = activeTab === 'lectors' ? filteredMembers : filteredParishes;
     if (!rows.length) {
@@ -752,6 +823,38 @@ export default function RegistryManagement() {
                   >
                     Export selected
                   </button>
+                    {activeTab === 'lectors' && canEditRegistry && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={viewSuspended}
+                          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-700 hover:bg-slate-100"
+                        >
+                          View Suspended
+                        </button>
+                        <button
+                          type="button"
+                          onClick={selectSuspendedInView}
+                          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-700 hover:bg-slate-100"
+                        >
+                          Select Suspended
+                        </button>
+                        <button
+                          type="button"
+                          onClick={bulkUnsuspendSelected}
+                          className="rounded-xl bg-emerald-600 px-3 py-2 text-[11px] font-semibold text-white hover:bg-emerald-700"
+                        >
+                          Bulk Unsuspend Selected
+                        </button>
+                        <button
+                          type="button"
+                          onClick={unsuspendAllSuspended}
+                          className="rounded-xl bg-rose-600 px-3 py-2 text-[11px] font-semibold text-white hover:bg-rose-700"
+                        >
+                          Unsuspend All Suspended
+                        </button>
+                      </>
+                    )}
                 </div>
               </div>
             </div>
