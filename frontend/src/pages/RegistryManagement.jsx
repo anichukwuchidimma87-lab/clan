@@ -656,6 +656,31 @@ export default function RegistryManagement() {
     ? filteredMembers.slice((currentPage - 1) * pageSize, currentPage * pageSize)
     : filteredParishes.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
+  const getCompactPageItems = (page, totalPages) => {
+    if (totalPages <= 7) {
+      return Array.from({ length: totalPages }, (_, index) => index + 1);
+    }
+
+    const visible = new Set([1, totalPages, page, page - 1, page + 1, page - 2, page + 2]);
+    const ordered = [...visible]
+      .filter(value => value >= 1 && value <= totalPages)
+      .sort((a, b) => a - b);
+
+    const result = [];
+    for (let i = 0; i < ordered.length; i += 1) {
+      const value = ordered[i];
+      const previous = ordered[i - 1];
+      if (previous !== undefined && value - previous > 1) {
+        result.push('ellipsis');
+      }
+      result.push(value);
+    }
+
+    return result;
+  };
+
+  const compactPageItems = useMemo(() => getCompactPageItems(currentPage, pages), [currentPage, pages]);
+
   useEffect(() => {
     setCurrentPage(1);
   }, [activeTab, searchQuery, parishFilter, roleFilter, statusFilter, sortBy]);
@@ -951,11 +976,21 @@ export default function RegistryManagement() {
                   <p className="text-[11px] text-slate-500">Showing {displayRows.length} of {totalMembersCount ?? filteredMembers.length} records</p>
                   <div className="flex items-center gap-2">
                     <button onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} disabled={currentPage === 1} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-600 disabled:opacity-40">Prev</button>
-                    {[...Array(pages)].map((_, index) => (
-                      <button key={index} onClick={() => setCurrentPage(index + 1)} className={`rounded-xl px-3 py-2 text-[11px] font-semibold ${currentPage === index + 1 ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'}`}>
-                        {index + 1}
-                      </button>
-                    ))}
+                    {compactPageItems.map((pageItem, index) => {
+                      if (pageItem === 'ellipsis') {
+                        return <span key={`ellipsis-${index}`} className="px-2 text-[11px] text-slate-400">...</span>;
+                      }
+
+                      return (
+                        <button
+                          key={pageItem}
+                          onClick={() => setCurrentPage(pageItem)}
+                          className={`rounded-xl px-3 py-2 text-[11px] font-semibold ${currentPage === pageItem ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                        >
+                          {pageItem}
+                        </button>
+                      );
+                    })}
                     <button onClick={() => setCurrentPage(prev => Math.min(pages, prev + 1))} disabled={currentPage === pages} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-600 disabled:opacity-40">Next</button>
                   </div>
                 </div>
@@ -1026,11 +1061,21 @@ export default function RegistryManagement() {
                   <p className="text-[11px] text-slate-500">Showing {displayRows.length} of {filteredParishes.length} records</p>
                   <div className="flex items-center gap-2">
                     <button onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} disabled={currentPage === 1} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-600 disabled:opacity-40">Prev</button>
-                    {[...Array(pages)].map((_, index) => (
-                      <button key={index} onClick={() => setCurrentPage(index + 1)} className={`rounded-xl px-3 py-2 text-[11px] font-semibold ${currentPage === index + 1 ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'}`}>
-                        {index + 1}
-                      </button>
-                    ))}
+                    {compactPageItems.map((pageItem, index) => {
+                      if (pageItem === 'ellipsis') {
+                        return <span key={`ellipsis-${index}`} className="px-2 text-[11px] text-slate-400">...</span>;
+                      }
+
+                      return (
+                        <button
+                          key={pageItem}
+                          onClick={() => setCurrentPage(pageItem)}
+                          className={`rounded-xl px-3 py-2 text-[11px] font-semibold ${currentPage === pageItem ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                        >
+                          {pageItem}
+                        </button>
+                      );
+                    })}
                     <button onClick={() => setCurrentPage(prev => Math.min(pages, prev + 1))} disabled={currentPage === pages} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-600 disabled:opacity-40">Next</button>
                   </div>
                 </div>
