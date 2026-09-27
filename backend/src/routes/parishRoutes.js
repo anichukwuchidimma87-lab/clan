@@ -13,6 +13,7 @@ const router = express.Router();
 
 router.get('/', protect, authorize('executive', 'superadmin'), getParishes);
 router.get('/with-counts', protect, authorize('executive', 'superadmin'), getParishesWithCounts);
+router.get('/inactive-report', protect, authorize('executive', 'superadmin'), getInactiveParishesReport);
 router.post('/', protect, authorize('executive', 'superadmin'), createParish);
 router.patch('/:id', protect, authorize('executive', 'superadmin'), updateParish);
 router.delete('/:id', protect, authorize('executive', 'superadmin'), deleteParish);

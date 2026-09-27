@@ -4,6 +4,7 @@ import {
   getApprovedUsers,
   approveUser,
   createExecutiveMember,
+  getUserProfile,
   updateUserProfile,
   updateUserRole
 } from '../controllers/userController.js';
@@ -14,9 +15,10 @@ const router = express.Router();
 
 router.get('/', protect, authorizeApproval, getApprovedUsers);
 router.get('/pending', protect, authorizeApproval, getPendingUsers);
+router.get('/profile/:userId', protect, getUserProfile);
 router.patch('/approve/:id', protect, authorizeApproval, approveUser);
 router.patch('/:id/role', protect, authorizeApproval, updateUserRole);
 router.post('/executive', protect, authorizeApproval, createExecutiveMember);
-router.patch('/profile/:userId', protect, authorizeApproval, upload.single('profileImage'), updateUserProfile);
+router.patch('/profile/:userId', protect, upload.single('profileImage'), updateUserProfile);
 
 export default router;

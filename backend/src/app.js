@@ -3,6 +3,8 @@ import cors from 'cors';
 import attendanceRoutes from './routes/attendanceRoutes.js';
 import authRoutes from './routes/authRoutes.js';
 import parishRoutes from './routes/parishRoutes.js'; 
+import auditRoutes from './routes/auditRoutes.js';
+import deanerySettingsRoutes from './routes/deanerySettingsRoutes.js';
 import financeRoutes from './routes/financeRoutes.js';
 import lectorRoutes from './routes/lectorRoutes.js'; // 1. Imported your lector routes file
 import publicRoutes from './routes/publicRoutes.js';
@@ -36,6 +38,8 @@ app.options('*', cors());
 app.use('/api/v1/attendance', attendanceRoutes);
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/parishes', parishRoutes); 
+app.use('/api/audit', auditRoutes);
+app.use('/api/v1/deaneries', deanerySettingsRoutes);
 app.use('/api/finance', financeRoutes);
 app.get('/api/ledger/summary', protect, getLedgerSummary);
 app.use('/api/v1/users', userRoutes);

@@ -126,3 +126,81 @@ export const getParishesWithCounts = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
+export const getInactiveParishesReport = async (req, res) => {
+  try {
+    // parse filtering / pagination params
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const requestedLimit = Math.min(200, parseInt(req.query.limit, 10) || 50);
+    const skip = (page - 1) * requestedLimit;
+    const sortBy = String(req.query.sortBy || 'name'); // name or zone
+    const zoneFilter = req.query.zone ? String(req.query.zone).trim() : null;
+    const nameFilter = req.query.name ? String(req.query.name).trim() : null;
+    const downloadCsv = String(req.query.download || '').toLowerCase() === 'csv';
+
+    // build pipeline
+    const pipeline = [];
+    if (nameFilter) pipeline.push({ $match: { name: { $regex: new RegExp(nameFilter, 'i') } } });
+    if (zoneFilter) pipeline.push({ $match: { zone: zoneFilter } });
+
+    pipeline.push({ $lookup: {
+      from: 'lectors',
+      let: { pid: '$_id', pname: '$name' },
+      pipeline: [
+        { $match: { $expr: { $or: [ { $and: [ { $ne: ['$$pid', null] }, { $eq: ['$parish', '$$pid'] } ] }, { $eq: ['$parishName', '$$pname'] } ] } } },
+        { $project: { firstName: 1, lastName: 1, phone: 1, roleInParish: 1, status: 1 } }
+      ],
+      as: 'members'
+    } });
+
+    pipeline.push({ $addFields: { lectorCount: { $size: '$members' } } });
+    pipeline.push({ $match: { lectorCount: 0 } });
+
+    // sort
+    const sortObj = sortBy === 'zone' ? { zone: 1, name: 1 } : { name: 1 };
+    pipeline.push({ $sort: sortObj });
+
+    // If CSV requested, return full CSV respecting filters (no pagination)
+    if (downloadCsv) {
+      const items = await Parish.aggregate(pipeline).exec();
+      const cols = ['Parish Name', 'Zone', 'MemberFirstName', 'MemberLastName', 'MemberPhone', 'MemberRole', 'MemberStatus'];
+      const rows = [cols.join(',')];
+      for (const p of items) {
+        if (!p.members || p.members.length === 0) {
+          rows.push(`"${String(p.name).replace(/"/g, '""')}","${String(p.zone || '').replace(/"/g, '""')}","","","","",""`);
+        } else {
+          for (const m of p.members) {
+            const line = [
+              `"${String(p.name).replace(/"/g, '""')}"`,
+              `"${String(p.zone || '').replace(/"/g, '""')}"`,
+              `"${String(m.firstName || '').replace(/"/g, '""')}"`,
+              `"${String(m.lastName || '').replace(/"/g, '""')}"`,
+              `"${String(m.phone || '').replace(/"/g, '""')}"`,
+              `"${String(m.roleInParish || '').replace(/"/g, '""')}"`,
+              `"${String(m.status || '').replace(/"/g, '""')}"`
+            ];
+            rows.push(line.join(','));
+          }
+        }
+      }
+      const csv = rows.join('\n');
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', 'attachment; filename="inactive-parishes-full-report.csv"');
+      return res.status(200).send(csv);
+    }
+
+    // get total count for pagination
+    const countPipeline = pipeline.concat([{ $count: 'total' }]);
+    const countRes = await Parish.aggregate(countPipeline).exec();
+    const total = (countRes && countRes[0] && countRes[0].total) || 0;
+
+    pipeline.push({ $skip: skip });
+    pipeline.push({ $limit: requestedLimit });
+
+    const items = await Parish.aggregate(pipeline).exec();
+    return res.status(200).json({ success: true, page, limit: requestedLimit, totalCount: total, totalPages: Math.ceil(total / requestedLimit), data: items });
+  } catch (error) {
+    console.error('[parishController] getInactiveParishesReport error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};

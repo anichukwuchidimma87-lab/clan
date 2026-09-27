@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import ParishHealthRing from '../components/ParishHealthRing';
 
 export default function RegistryManagement() {
   const [activeTab, setActiveTab] = useState('lectors');
@@ -31,9 +32,13 @@ export default function RegistryManagement() {
   const [alertMessage, setAlertMessage] = useState(null);
   const [selectedMember, setSelectedMember] = useState(null);
   const [parishFilter, setParishFilter] = useState('all');
+  const [parishStatusFilter, setParishStatusFilter] = useState('all');
   const [roleFilter, setRoleFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [sortBy, setSortBy] = useState('name');
+  const [parishReviewOpen, setParishReviewOpen] = useState(false);
+  const [parishReviewTarget, setParishReviewTarget] = useState(null);
+  const [deaneryTargets, setDeaneryTargets] = useState({});
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerType, setDrawerType] = useState('lector');
   const [selectedRows, setSelectedRows] = useState([]);
@@ -118,6 +123,14 @@ export default function RegistryManagement() {
       if (parishesJson.success) {
         // backend now returns lectorCount on each parish
         setParishes(parishesJson.data.map(p => ({ ...p, lectorCount: p.lectorCount || 0 })));
+        // fetch deanery-level targets
+        try {
+          const tRes = await fetch('https://clan-3slh.onrender.com/api/v1/deaneries', { headers });
+          const tJson = await tRes.json();
+          if (tJson.success) setDeaneryTargets(tJson.data || {});
+        } catch (e) {
+          // ignore
+        }
         if (!formState.parishId && parishesJson.data.length > 0) {
           setFormState(prev => ({ ...prev, parishId: parishesJson.data[0]._id }));
         }
@@ -463,6 +476,92 @@ export default function RegistryManagement() {
     setAlertMessage({ type: 'info', text: 'Filtered to Suspended members for review.' });
   };
 
+  const exportInactiveParishesCsv = () => {
+    const rows = parishes.filter(p => (p.lectorCount || 0) === 0);
+    if (!rows.length) {
+      setAlertMessage({ type: 'error', text: 'No inactive parishes to export.' });
+      return;
+    }
+
+    const keys = ['name', 'zone'];
+    const csvRows = [keys.join(',')];
+    rows.forEach(row => {
+      const values = keys.map(key => `"${String(row[key] ?? '').replace(/"/g, '""')}"`);
+      csvRows.push(values.join(','));
+    });
+
+    const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'inactive-parishes.csv';
+    link.click();
+    URL.revokeObjectURL(url);
+    setAlertMessage({ type: 'success', text: `Exported ${rows.length} inactive parish(es).` });
+  };
+
+  const exportFullInactiveReport = async () => {
+    try {
+      const res = await fetch('https://clan-3slh.onrender.com/api/v1/parishes/inactive-report?download=csv', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (!res.ok) {
+        setAlertMessage({ type: 'error', text: 'Failed to generate full inactive report.' });
+        return;
+      }
+
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'inactive-parishes-full-report.csv';
+      link.click();
+      URL.revokeObjectURL(url);
+      setAlertMessage({ type: 'success', text: 'Full inactive report downloaded.' });
+    } catch (error) {
+      console.error('Export full inactive failed', error);
+      setAlertMessage({ type: 'error', text: 'Network error while exporting full report.' });
+    }
+  };
+
+  const openParishReview = (parish) => {
+    setParishReviewTarget(parish);
+    setParishReviewOpen(true);
+    setSelectedParishId(parish._id);
+    handleSelectParish(parish._id);
+  };
+
+  const closeParishReview = () => {
+    setParishReviewOpen(false);
+    setParishReviewTarget(null);
+    setParishMembers([]);
+  };
+
+  const addMemberToParish = (parish) => {
+    setFormState(prev => ({ ...prev, parishId: parish._id }));
+    openLectorDrawer();
+  };
+
+  const saveDeaneryTarget = async (deanery, value) => {
+    try {
+      const res = await fetch('https://clan-3slh.onrender.com/api/v1/deaneries', {
+        method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deanery, healthTarget: Number(value) })
+      });
+      const json = await res.json();
+      if (json.success) {
+        setDeaneryTargets(prev => ({ ...prev, [deanery]: json.data.healthTarget }));
+        setAlertMessage({ type: 'success', text: `Saved target for ${deanery}.` });
+      } else {
+        setAlertMessage({ type: 'error', text: json.message || 'Failed to save target.' });
+      }
+    } catch (err) {
+      console.error('Save target failed', err);
+      setAlertMessage({ type: 'error', text: 'Network error while saving target.' });
+    }
+  };
+
   const exportCsv = () => {
     const rows = activeTab === 'lectors' ? filteredMembers : filteredParishes;
     if (!rows.length) {
@@ -590,12 +689,50 @@ export default function RegistryManagement() {
     return list;
   }, [members, searchQuery, parishFilter, roleFilter, statusFilter, sortBy]);
 
+  const parishSummaryStats = useMemo(() => {
+    const totalParishes = parishes.length;
+    const activeParishes = parishes.filter(parish => (parish.lectorCount || 0) > 0).length;
+    const inactiveParishes = totalParishes - activeParishes;
+    const coverage = totalParishes ? Math.round((activeParishes / totalParishes) * 100) : 0;
+
+    return {
+      totalParishes,
+      activeParishes,
+      inactiveParishes,
+      coverage
+    };
+  }, [parishes]);
+
+  const parishPerformanceStats = useMemo(() => {
+    return [...parishes]
+      .map(parish => ({
+        ...parish,
+        memberCount: parish.lectorCount || 0
+      }))
+      .sort((a, b) => b.memberCount - a.memberCount)
+      .slice(0, 5);
+  }, [parishes]);
+
+  const inactiveParishQueue = useMemo(() => {
+    return [...parishes]
+      .filter(parish => (parish.lectorCount || 0) === 0)
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .slice(0, 5);
+  }, [parishes]);
+
   const filteredParishes = useMemo(() => {
     const search = searchQuery.trim().toLowerCase();
     let list = [...parishes];
 
     if (search) {
       list = list.filter(parish => parish.name.toLowerCase().includes(search));
+    }
+
+    if (parishStatusFilter !== 'all') {
+      list = list.filter(parish => {
+        const isActive = (parish.lectorCount || 0) > 0;
+        return parishStatusFilter === 'active' ? isActive : !isActive;
+      });
     }
 
     switch (sortBy) {
@@ -605,13 +742,16 @@ export default function RegistryManagement() {
       case 'members':
         list.sort((a, b) => (b.lectorCount || 0) - (a.lectorCount || 0));
         break;
+      case 'inactive':
+        list.sort((a, b) => ((b.lectorCount || 0) > 0 ? 1 : 0) - ((a.lectorCount || 0) > 0 ? 1 : 0));
+        break;
       default:
         list.sort((a, b) => a.name.localeCompare(b.name));
         break;
     }
 
     return list;
-  }, [parishes, searchQuery, sortBy]);
+  }, [parishes, searchQuery, sortBy, parishStatusFilter]);
 
   const zoneStats = useMemo(() => {
     const counts = {};
@@ -656,31 +796,6 @@ export default function RegistryManagement() {
     ? filteredMembers.slice((currentPage - 1) * pageSize, currentPage * pageSize)
     : filteredParishes.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
-  const getCompactPageItems = (page, totalPages) => {
-    if (totalPages <= 7) {
-      return Array.from({ length: totalPages }, (_, index) => index + 1);
-    }
-
-    const visible = new Set([1, totalPages, page, page - 1, page + 1, page - 2, page + 2]);
-    const ordered = [...visible]
-      .filter(value => value >= 1 && value <= totalPages)
-      .sort((a, b) => a - b);
-
-    const result = [];
-    for (let i = 0; i < ordered.length; i += 1) {
-      const value = ordered[i];
-      const previous = ordered[i - 1];
-      if (previous !== undefined && value - previous > 1) {
-        result.push('ellipsis');
-      }
-      result.push(value);
-    }
-
-    return result;
-  };
-
-  const compactPageItems = useMemo(() => getCompactPageItems(currentPage, pages), [currentPage, pages]);
-
   useEffect(() => {
     setCurrentPage(1);
   }, [activeTab, searchQuery, parishFilter, roleFilter, statusFilter, sortBy]);
@@ -701,6 +816,9 @@ export default function RegistryManagement() {
               <span className="rounded-full bg-white/10 text-indigo-100 border border-white/10 px-4 py-2 font-semibold backdrop-blur-sm">{payload?.role || 'Guest'}</span>
               <button onClick={() => setActiveTab('lectors')} className={`px-4 py-2 rounded-2xl ${activeTab === 'lectors' ? 'bg-white text-slate-900 shadow-sm' : 'bg-white/5 text-slate-200 border border-white/10 hover:bg-white/10'}`}>Lector Roster</button>
               <button onClick={() => setActiveTab('parishes')} className={`px-4 py-2 rounded-2xl ${activeTab === 'parishes' ? 'bg-white text-slate-900 shadow-sm' : 'bg-white/5 text-slate-200 border border-white/10 hover:bg-white/10'}`}>Parish Directory</button>
+              {canEditRegistry && (
+                <button onClick={() => window.location.href = '/admin/audit'} className="px-3 py-2 rounded-2xl bg-white/10 text-white/80 border border-white/10">Audit Logs</button>
+              )}
             </div>
           </div>
         </div>
@@ -755,7 +873,7 @@ export default function RegistryManagement() {
                   <p className="text-xs text-slate-500 mt-1">
                     {activeTab === 'lectors'
                       ? `Showing ${displayRows.length} of ${totalMembersCount ?? summaryStats.totalLectors} lectors`
-                      : `Showing ${filteredParishes.length} of ${summaryStats.totalParishes} parishes`}
+                      : `Showing ${filteredParishes.length} of ${parishSummaryStats.totalParishes} parishes`}
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -788,6 +906,31 @@ export default function RegistryManagement() {
                       {chip.label}
                     </button>
                   ))}
+                </div>
+              )}
+
+              {activeTab === 'parishes' && (
+                <div className="mt-5 grid gap-3 md:grid-cols-4">
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500">Total parishes</p>
+                    <p className="mt-3 text-3xl font-black text-slate-900">{parishSummaryStats.totalParishes}</p>
+                    <p className="mt-1 text-[11px] text-slate-500">All parish entries</p>
+                  </div>
+                  <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
+                    <p className="text-[10px] uppercase tracking-[0.2em] text-emerald-700">Active parishes</p>
+                    <p className="mt-3 text-3xl font-black text-emerald-700">{parishSummaryStats.activeParishes}</p>
+                    <p className="mt-1 text-[11px] text-emerald-700/80">With registered lectors</p>
+                  </div>
+                  <div className="rounded-2xl border border-amber-100 bg-amber-50 p-4">
+                    <p className="text-[10px] uppercase tracking-[0.2em] text-amber-700">Inactive parishes</p>
+                    <p className="mt-3 text-3xl font-black text-amber-700">{parishSummaryStats.inactiveParishes}</p>
+                    <p className="mt-1 text-[11px] text-amber-700/80">No registered members</p>
+                  </div>
+                  <div className="rounded-2xl border border-indigo-100 bg-indigo-50 p-4">
+                    <p className="text-[10px] uppercase tracking-[0.2em] text-indigo-700">Coverage</p>
+                    <p className="mt-3 text-3xl font-black text-indigo-700">{parishSummaryStats.coverage}%</p>
+                    <p className="mt-1 text-[11px] text-indigo-700/80">Active coverage rate</p>
+                  </div>
                 </div>
               )}
 
@@ -826,6 +969,14 @@ export default function RegistryManagement() {
                   </select>
                 )}
 
+                {activeTab === 'parishes' && (
+                  <select value={parishStatusFilter} onChange={(e) => setParishStatusFilter(e.target.value)} className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-700 focus:border-indigo-300 focus:outline-none">
+                    <option value="all">All Parish Status</option>
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                  </select>
+                )}
+
                 <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-700 focus:border-indigo-300 focus:outline-none">
                   <option value="name">Sort: Name</option>
                   <option value="parish">Sort: Parish</option>
@@ -833,6 +984,7 @@ export default function RegistryManagement() {
                   <option value="recent">Sort: Recent</option>
                   <option value="status">Sort: Status</option>
                   {activeTab === 'parishes' && <option value="members">Sort: Members</option>}
+                  {activeTab === 'parishes' && <option value="inactive">Sort: Activity</option>}
                 </select>
               </div>
 
@@ -976,21 +1128,11 @@ export default function RegistryManagement() {
                   <p className="text-[11px] text-slate-500">Showing {displayRows.length} of {totalMembersCount ?? filteredMembers.length} records</p>
                   <div className="flex items-center gap-2">
                     <button onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} disabled={currentPage === 1} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-600 disabled:opacity-40">Prev</button>
-                    {compactPageItems.map((pageItem, index) => {
-                      if (pageItem === 'ellipsis') {
-                        return <span key={`ellipsis-${index}`} className="px-2 text-[11px] text-slate-400">...</span>;
-                      }
-
-                      return (
-                        <button
-                          key={pageItem}
-                          onClick={() => setCurrentPage(pageItem)}
-                          className={`rounded-xl px-3 py-2 text-[11px] font-semibold ${currentPage === pageItem ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
-                        >
-                          {pageItem}
-                        </button>
-                      );
-                    })}
+                    {[...Array(pages)].map((_, index) => (
+                      <button key={index} onClick={() => setCurrentPage(index + 1)} className={`rounded-xl px-3 py-2 text-[11px] font-semibold ${currentPage === index + 1 ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'}`}>
+                        {index + 1}
+                      </button>
+                    ))}
                     <button onClick={() => setCurrentPage(prev => Math.min(pages, prev + 1))} disabled={currentPage === pages} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-600 disabled:opacity-40">Next</button>
                   </div>
                 </div>
@@ -1061,21 +1203,11 @@ export default function RegistryManagement() {
                   <p className="text-[11px] text-slate-500">Showing {displayRows.length} of {filteredParishes.length} records</p>
                   <div className="flex items-center gap-2">
                     <button onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} disabled={currentPage === 1} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-600 disabled:opacity-40">Prev</button>
-                    {compactPageItems.map((pageItem, index) => {
-                      if (pageItem === 'ellipsis') {
-                        return <span key={`ellipsis-${index}`} className="px-2 text-[11px] text-slate-400">...</span>;
-                      }
-
-                      return (
-                        <button
-                          key={pageItem}
-                          onClick={() => setCurrentPage(pageItem)}
-                          className={`rounded-xl px-3 py-2 text-[11px] font-semibold ${currentPage === pageItem ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
-                        >
-                          {pageItem}
-                        </button>
-                      );
-                    })}
+                    {[...Array(pages)].map((_, index) => (
+                      <button key={index} onClick={() => setCurrentPage(index + 1)} className={`rounded-xl px-3 py-2 text-[11px] font-semibold ${currentPage === index + 1 ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'}`}>
+                        {index + 1}
+                      </button>
+                    ))}
                     <button onClick={() => setCurrentPage(prev => Math.min(pages, prev + 1))} disabled={currentPage === pages} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-600 disabled:opacity-40">Next</button>
                   </div>
                 </div>
@@ -1116,6 +1248,95 @@ export default function RegistryManagement() {
                     )) : (
                       <p className="text-sm text-indigo-100">No leadership roles assigned yet.</p>
                     )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'parishes' && (
+              <div className="space-y-6">
+                <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5">
+                  <div className="flex items-center justify-between gap-2 mb-3">
+                    <h2 className="font-semibold text-slate-900">Parish activity overview</h2>
+                    <span className="rounded-full bg-indigo-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-indigo-700">Live</span>
+                  </div>
+                  <div className="grid gap-3">
+                    <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
+                      <div>
+                        <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">Active parishes</p>
+                        <p className="mt-1 text-sm font-semibold text-slate-800">{parishSummaryStats.activeParishes} recorded</p>
+                      </div>
+                      <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-bold text-emerald-700">{parishSummaryStats.coverage}%</span>
+                    </div>
+                    <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
+                      <div>
+                        <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">Inactive parishes</p>
+                        <p className="mt-1 text-sm font-semibold text-slate-800">{parishSummaryStats.inactiveParishes} waiting</p>
+                      </div>
+                      <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-bold text-amber-700">{100 - parishSummaryStats.coverage}%</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-gradient-to-br from-indigo-600 via-indigo-700 to-slate-900 rounded-3xl p-5 text-white shadow-lg">
+                  <p className="text-[10px] uppercase tracking-[0.2em] text-indigo-100">Top coverage</p>
+                  <div className="mt-4 space-y-3">
+                    {parishPerformanceStats.map((parish, index) => (
+                      <div key={parish._id} className="flex items-center justify-between rounded-2xl bg-white/10 px-3 py-2 backdrop-blur-sm">
+                        <div className="flex items-center gap-3">
+                          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white/15 text-[10px] font-bold text-white">#{index + 1}</span>
+                          <span className="text-sm text-indigo-50 truncate max-w-[150px]">{parish.name}</span>
+                        </div>
+                        <span className="rounded-full bg-white/15 px-2.5 py-1 text-[10px] font-bold text-white">{parish.memberCount}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5">
+                  <div className="flex items-center justify-between mb-3">
+                    <h2 className="font-semibold text-slate-900">Inactive parish review queue</h2>
+                    <div className="flex gap-2">
+                      <button onClick={exportInactiveParishesCsv} className="rounded-xl bg-indigo-600 px-3 py-2 text-[11px] font-semibold text-white hover:bg-indigo-700">Export Inactive</button>
+                      <button onClick={exportFullInactiveReport} className="rounded-xl bg-indigo-700 px-3 py-2 text-[11px] font-semibold text-white hover:bg-indigo-800">Export Full Report</button>
+                      <button onClick={() => { setParishStatusFilter('inactive'); setAlertMessage({ type: 'info', text: 'Filtered to inactive parishes.' }); }} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-700 hover:bg-slate-100">Filter Inactive</button>
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    {inactiveParishQueue.length ? inactiveParishQueue.map((parish) => (
+                      <div key={parish._id} className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-800">{parish.name}</p>
+                          <p className="text-[11px] text-slate-500">Awaiting registration</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => openParishReview(parish)}
+                            className="rounded-xl bg-slate-100 px-2.5 py-2 text-[10px] font-semibold text-slate-700 hover:bg-slate-200"
+                          >
+                            Review
+                          </button>
+                          <button onClick={() => addMemberToParish(parish)} className="rounded-xl bg-emerald-600 px-2.5 py-2 text-[10px] font-semibold text-white hover:bg-emerald-700">Add Member</button>
+                        </div>
+                      </div>
+                    )) : (
+                      <p className="text-sm text-slate-500">No inactive parishes right now.</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5">
+                  <h2 className="font-semibold text-slate-900 mb-3">Zone analysis</h2>
+                  <div className="space-y-3">
+                    {zoneStats.map(({ zone, count }) => (
+                      <div key={zone} className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
+                        <div>
+                          <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">{zone}</p>
+                          <p className="mt-1 text-sm font-semibold text-slate-800">{count} parishes</p>
+                        </div>
+                        <span className="rounded-full bg-indigo-100 px-2.5 py-1 text-[10px] font-bold text-indigo-700">{Math.round((count / Math.max(parishes.length, 1)) * 100)}%</span>
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>
@@ -1201,6 +1422,64 @@ export default function RegistryManagement() {
                       </div>
                       <div className="mt-4 flex justify-end">
                         <button onClick={() => setSelectedMember(null)} className="rounded-2xl bg-indigo-600 text-white px-4 py-2">Close</button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {parishReviewOpen && parishReviewTarget && (
+                  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+                    <div className="bg-white rounded-xl p-6 w-full max-w-2xl">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <h3 className="text-lg font-bold">{parishReviewTarget.name}</h3>
+                          <p className="text-sm text-slate-500">{parishReviewTarget.zone} — {parishReviewTarget.lectorCount || 0} members</p>
+                        </div>
+                        <div className="flex gap-2">
+                          <button onClick={closeParishReview} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold">Close</button>
+                          <button onClick={() => addMemberToParish(parishReviewTarget)} className="rounded-xl bg-emerald-600 px-3 py-2 text-[11px] font-semibold text-white">Add Member</button>
+                        </div>
+                      </div>
+
+                      <div className="mt-4">
+                        <div className="mb-3 flex items-center gap-4">
+                          <ParishHealthRing count={parishReviewTarget.lectorCount || 0} target={deaneryTargets[parishReviewTarget.zone] || 50} />
+                          <div>
+                            <p className="text-sm font-medium">Parish health</p>
+                            <p className="text-xs text-slate-500 mt-1">Visual health score based on member coverage (target 50)</p>
+                          </div>
+                        </div>
+                        {canEditRegistry && (
+                          <div className="mt-2 flex items-center gap-2">
+                            <input defaultValue={deaneryTargets[parishReviewTarget.zone] ?? 50} type="number" min={1} className="rounded-xl border p-2 w-32" id="deaneryTargetInput" />
+                            <button onClick={() => {
+                              const el = document.getElementById('deaneryTargetInput');
+                              const val = el ? Number(el.value) : 50;
+                              saveDeaneryTarget(parishReviewTarget.zone, val);
+                            }} className="rounded-xl bg-indigo-600 px-3 py-2 text-white">Save Target</button>
+                          </div>
+                        )}
+
+                        <div>
+                          <h4 className="font-semibold text-slate-900 mb-2">Members</h4>
+                          {parishMembers.length ? (
+                            <ul className="space-y-2">
+                              {parishMembers.map(m => (
+                                <li key={m._id} className="flex items-center justify-between rounded-2xl border border-slate-200 p-3 bg-slate-50">
+                                  <div>
+                                    <p className="font-semibold">{m.firstName} {m.lastName}</p>
+                                    <p className="text-[11px] text-slate-500">{m.phone}</p>
+                                  </div>
+                                  <div className="flex gap-2">
+                                    <button onClick={() => setSelectedMember(m)} className="rounded-xl bg-slate-100 px-3 py-2 text-[11px] font-semibold text-slate-700">Open</button>
+                                    <button onClick={() => { setEditingMember(m); openLectorDrawer(m); }} className="rounded-xl bg-amber-100 px-3 py-2 text-[11px] font-semibold text-amber-700">Edit</button>
+                                  </div>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p className="text-sm text-slate-500">No members yet. You can add a member directly to this parish.</p>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>

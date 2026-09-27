@@ -10,12 +10,15 @@ import GalleryCategory from './pages/GalleryCategory';
 import Leadership from './pages/Leadership';
 import CheckIn from './pages/CheckIn';
 import RegistryManagement from './pages/RegistryManagement';
+import AuditLogs from './pages/AuditLogs';
+import DeaneryTargets from './pages/DeaneryTargets';
 import Users from './pages/Users';
 import AdminControl from './pages/AdminControl';
 import AdminContent from './pages/AdminContent';
 import ExecutiveManagement from './pages/ExecutiveManagement';
 import Settings from './pages/Settings';
 import EventCalendar from './pages/EventCalendar';
+import Profile from './pages/Profile';
 
 const getStoredRole = () => {
   const token = localStorage.getItem('clan_token');
@@ -48,16 +51,19 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/profile" element={<Profile />} />
 
         <Route path="/ledger" element={<RoleGate allow={['superadmin', 'executive', 'president']}><FinancialLedger /></RoleGate>} />
         <Route path="/registry" element={<RoleGate allow={['superadmin', 'executive', 'president']}><RegistryManagement /></RoleGate>} />
+        <Route path="/admin/audit" element={<RoleGate allow={['superadmin', 'executive']}><AuditLogs /></RoleGate>} />
+        <Route path="/admin/deanery-targets" element={<RoleGate allow={['superadmin', 'executive']}><DeaneryTargets /></RoleGate>} />
         <Route path="/users" element={<RoleGate allow={['superadmin', 'executive']}><Users /></RoleGate>} />
         <Route path="/admin/executives" element={<RoleGate allow={['superadmin', 'executive']}><ExecutiveManagement /></RoleGate>} />
         <Route path="/admin/control" element={<RoleGate allow={['superadmin', 'executive']}><AdminControl /></RoleGate>} />
         <Route path="/admin/content/:section" element={<RoleGate allow={['superadmin', 'executive']}><AdminContent /></RoleGate>} />
         <Route path="/events" element={<RoleGate allow={['superadmin', 'executive']}><EventCalendar /></RoleGate>} />
         <Route path="/checkin" element={<CheckIn />} />
-        <Route path="/settings" element={<Settings />} />
+        <Route path="/settings" element={<RoleGate allow={['superadmin', 'executive']}><Settings /></RoleGate>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Router>

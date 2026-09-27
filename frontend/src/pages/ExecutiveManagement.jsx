@@ -18,7 +18,17 @@ const EXECUTIVE_POSITIONS = [
   'Patroness'
 ];
 
+const EXECUTIVE_POSITION_ORDER = Object.fromEntries(
+  EXECUTIVE_POSITIONS.map((position, index) => [position, index])
+);
+
 const normalizePosition = (position) => position || 'Executive Member';
+
+const getExecutiveSortKey = (user) => {
+  const position = normalizePosition(user.position);
+  const name = user.lastName || user.name || '';
+  return [EXECUTIVE_POSITION_ORDER[position] ?? Number.MAX_SAFE_INTEGER, name.toLowerCase()];
+};
 
 const getSessionRange = (user) => {
   const defaultYear = new Date().getFullYear();
@@ -27,12 +37,53 @@ const getSessionRange = (user) => {
   return { sessionStart, sessionEnd };
 };
 
+const parseLegacyName = (name = '') => {
+  const raw = String(name || '').trim();
+  if (!raw) {
+    return { title: '', firstName: '', middleName: '', lastName: '' };
+  }
+
+  const titleMatch = raw.match(/^([A-Za-z.]+)\s+/);
+  const title = titleMatch ? titleMatch[1].trim() : '';
+  const remaining = titleMatch ? raw.slice(titleMatch[0].length).trim() : raw;
+  const parts = remaining.split(/\s+/).filter(Boolean);
+
+  if (parts.length === 0) {
+    return { title, firstName: '', middleName: '', lastName: '' };
+  }
+
+  if (parts.length === 1) {
+    return { title, firstName: parts[0], middleName: '', lastName: '' };
+  }
+
+  if (parts.length === 2) {
+    return { title, firstName: parts[0], middleName: '', lastName: parts[1] };
+  }
+
+  return {
+    title,
+    firstName: parts[0],
+    middleName: parts.slice(1, -1).join(' '),
+    lastName: parts[parts.length - 1],
+  };
+};
+
+const buildDisplayName = ({ title = '', firstName = '', middleName = '', lastName = '' }) => {
+  const formatted = [title, firstName, middleName, lastName].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+  return formatted || 'Executive Member';
+};
+
 const emptyForm = () => ({
+  title: 'Mr.',
+  firstName: '',
+  middleName: '',
+  lastName: '',
   name: '',
   position: 'Executive Member',
   profileTitle: '',
   email: '',
   phone: '',
+  parish: '',
   executiveSessionStart: new Date().getFullYear(),
   executiveSessionEnd: new Date().getFullYear(),
   isCurrentExecutiveSession: true,
@@ -66,7 +117,16 @@ export default function ExecutiveManagement() {
       const endA = Number(groupA[0].executiveSessionEnd ?? groupA[0].executiveSessionStart ?? 0);
       const endB = Number(groupB[0].executiveSessionEnd ?? groupB[0].executiveSessionStart ?? 0);
       return endB - endA;
-    });
+    }).map(([sessionKey, group]) => [
+      sessionKey,
+      [...group].sort((a, b) => {
+        const [rankA, lastNameA] = getExecutiveSortKey(a);
+        const [rankB, lastNameB] = getExecutiveSortKey(b);
+
+        if (rankA !== rankB) return rankA - rankB;
+        return lastNameA.localeCompare(lastNameB);
+      })
+    ]);
   }, [users]);
 
   const fetchApprovedUsers = async () => {
@@ -110,14 +170,20 @@ export default function ExecutiveManagement() {
 
   const startEdit = (user) => {
     const { sessionStart, sessionEnd } = getSessionRange(user);
+    const parsedName = parseLegacyName(user.name || `${user.firstName || ''} ${user.lastName || ''}`.trim());
     setEditingId(user._id);
     setCreating(false);
     setFormData({
-      name: user.name || '',
+      title: user.title || parsedName.title || 'Mr.',
+      firstName: user.firstName || parsedName.firstName || '',
+      middleName: user.middleName || parsedName.middleName || '',
+      lastName: user.lastName || parsedName.lastName || '',
+      name: user.name || buildDisplayName({ title: user.title || parsedName.title || 'Mr.', firstName: user.firstName || parsedName.firstName || '', middleName: user.middleName || parsedName.middleName || '', lastName: user.lastName || parsedName.lastName || '' }),
       position: normalizePosition(user.position),
       profileTitle: user.profileTitle || '',
       email: user.email || '',
       phone: user.phone || '',
+      parish: user.parish || '',
       executiveSessionStart: user.executiveSessionStart ?? sessionStart,
       executiveSessionEnd: user.executiveSessionEnd ?? sessionEnd,
       isCurrentExecutiveSession: user.isCurrentExecutiveSession ?? true,
@@ -144,8 +210,21 @@ export default function ExecutiveManagement() {
       return;
     }
     try {
+      const builtName = buildDisplayName({
+        title: formData.title,
+        firstName: formData.firstName,
+        middleName: formData.middleName,
+        lastName: formData.lastName,
+      });
+
       const payload = {
         ...formData,
+        name: builtName,
+        title: formData.title,
+        firstName: formData.firstName,
+        middleName: formData.middleName,
+        lastName: formData.lastName,
+        parish: formData.parish,
         executiveSessionStart: Number(formData.executiveSessionStart),
         executiveSessionEnd: Number(formData.executiveSessionEnd),
         homepageOrder: Number(formData.homepageOrder),
@@ -259,27 +338,37 @@ export default function ExecutiveManagement() {
                       </div>
 
                       <div className="space-y-3">
-                        {group.map((user) => (
-                          <div key={user._id} className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                            <div className="flex items-start gap-3">
-                              <div className="h-10 w-10 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-black shadow-sm">
-                                {user.name?.charAt(0)?.toUpperCase() || 'E'}
-                              </div>
-                              <div>
-                                <h4 className="font-bold text-slate-900">{user.name}</h4>
-                                <p className="text-[10px] uppercase tracking-[0.18em] text-indigo-600 font-bold">{user.position || 'Executive Member'}</p>
-                                <p className="text-sm text-slate-500">{user.profileTitle || 'Deanery Executive'}</p>
-                                {user.email && <p className="text-xs text-slate-500">{user.email}</p>}
-                                {user.phone && <p className="text-xs text-slate-500">{user.phone}</p>}
-                                {user.isFeaturedOnHomepage && (
-                                  <span className="inline-flex items-center mt-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.18em] text-amber-700">Homepage leader</span>
-                                )}
-                              </div>
-                            </div>
+                        {group.map((user) => {
+                          const parsedName = parseLegacyName(user.name || `${user.firstName || ''} ${user.lastName || ''}`.trim());
+                          const title = user.title || parsedName.title || 'Mr.';
+                          const firstName = user.firstName || parsedName.firstName || '';
+                          const middleName = user.middleName || parsedName.middleName || '';
+                          const lastName = user.lastName || parsedName.lastName || '';
+                          const displayName = buildDisplayName({ title, firstName, middleName, lastName });
 
-                            <button onClick={() => startEdit(user)} className="bg-indigo-600 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-indigo-700">Edit</button>
-                          </div>
-                        ))}
+                          return (
+                            <div key={user._id} className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                              <div className="flex items-start gap-3">
+                                <div className="h-10 w-10 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-black shadow-sm">
+                                  {(firstName || lastName || 'E').charAt(0).toUpperCase()}
+                                </div>
+                                <div>
+                                  <h4 className="font-bold text-slate-900">{displayName}</h4>
+                                  <p className="text-[10px] uppercase tracking-[0.18em] text-indigo-600 font-bold">{user.position || 'Executive Member'}</p>
+                                  <p className="text-sm text-slate-500">{user.profileTitle || 'Deanery Executive'}</p>
+                                  <p className="text-xs text-slate-600 font-medium">Parish: {user.parish || 'Not assigned'}</p>
+                                  {user.email && <p className="text-xs text-slate-500">{user.email}</p>}
+                                  {user.phone && <p className="text-xs text-slate-500">{user.phone}</p>}
+                                  {user.isFeaturedOnHomepage && (
+                                    <span className="inline-flex items-center mt-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.18em] text-amber-700">Homepage leader</span>
+                                  )}
+                                </div>
+                              </div>
+
+                              <button onClick={() => startEdit(user)} className="bg-indigo-600 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-indigo-700">Edit</button>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   );
@@ -295,18 +384,55 @@ export default function ExecutiveManagement() {
         <Modal title={creating ? 'Add Executive' : editingId ? 'Update Executive' : 'Executive'} onClose={cancelEdit}>
           {/* form JSX extracted inline for reuse */}
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-[0.2em] text-slate-500 mb-2">Full name</label>
-              <input type="text" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} required
-                className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-200"/>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-[0.2em] text-slate-500 mb-2">Title</label>
+                <select value={formData.title} onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-200">
+                  <option value="Mr.">Mr.</option>
+                  <option value="Mrs.">Mrs.</option>
+                  <option value="Miss">Miss</option>
+                  <option value="Ms.">Ms.</option>
+                  <option value="Rev.">Rev.</option>
+                  <option value="Fr.">Fr.</option>
+                  <option value="Dr.">Dr.</option>
+                  <option value="Prof.">Prof.</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-[0.2em] text-slate-500 mb-2">Position</label>
+                <select value={formData.position} onChange={(e) => setFormData({ ...formData, position: e.target.value })}
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-200">
+                  {EXECUTIVE_POSITIONS.map((position) => <option key={position} value={position}>{position}</option>)}
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-[0.2em] text-slate-500 mb-2">First name</label>
+                <input type="text" value={formData.firstName} onChange={(e) => setFormData({ ...formData, firstName: e.target.value })} required
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-200"/>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-[0.2em] text-slate-500 mb-2">Surname</label>
+                <input type="text" value={formData.lastName} onChange={(e) => setFormData({ ...formData, lastName: e.target.value })} required
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-200"/>
+              </div>
             </div>
 
             <div>
-              <label className="block text-xs font-bold uppercase tracking-[0.2em] text-slate-500 mb-2">Position</label>
-              <select value={formData.position} onChange={(e) => setFormData({ ...formData, position: e.target.value })}
-                className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-200">
-                {EXECUTIVE_POSITIONS.map((position) => <option key={position} value={position}>{position}</option>)}
-              </select>
+              <label className="block text-xs font-bold uppercase tracking-[0.2em] text-slate-500 mb-2">Middle name (optional)</label>
+              <input type="text" value={formData.middleName} onChange={(e) => setFormData({ ...formData, middleName: e.target.value })}
+                className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-200" placeholder="Optional"/>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-[0.2em] text-slate-500 mb-2">Parish</label>
+              <input type="text" value={formData.parish} onChange={(e) => setFormData({ ...formData, parish: e.target.value })} placeholder="e.g. Holy Trinity"
+                className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-200"/>
             </div>
 
             <div>

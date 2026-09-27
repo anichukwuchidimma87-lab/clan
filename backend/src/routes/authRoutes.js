@@ -6,10 +6,49 @@ import { normalizeUserRole } from '../utils/roleUtils.js';
 
 const router = express.Router();
 
+const parseFullName = (rawName = '', fallbackTitle = '') => {
+  const cleanName = String(rawName || '').trim();
+  if (!cleanName) {
+    return { title: fallbackTitle, firstName: '', lastName: '', name: '' };
+  }
+
+  const titleMatches = ['mr.', 'mrs.', 'miss', 'ms.', 'dr.', 'rev.', 'fr.', 'sir', 'madam'];
+  const words = cleanName.split(/\s+/).filter(Boolean);
+  let title = fallbackTitle;
+  let firstName = '';
+  let lastName = '';
+
+  let startIndex = 0;
+  const firstToken = words[0]?.toLowerCase();
+  if (titleMatches.includes(firstToken)) {
+    title = words[0].replace(/\.$/, '');
+    startIndex = 1;
+  }
+
+  if (startIndex >= words.length) {
+    return { title, firstName: '', lastName: '', name: cleanName };
+  }
+
+  if (words.length - startIndex === 1) {
+    firstName = words[startIndex];
+    lastName = '';
+  } else {
+    firstName = words[startIndex];
+    lastName = words.slice(startIndex + 1).join(' ');
+  }
+
+  return {
+    title: title || '',
+    firstName,
+    lastName,
+    name: [title, firstName, lastName].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim()
+  };
+};
+
 // 1. REGISTER NEW USER ROUTE
 router.post('/register', async (req, res) => {
   try {
-    const { name, email, password, role, yearCommissioned } = req.body;
+    const { name, email, password, role, yearCommissioned, title, firstName, lastName } = req.body;
 
     const userExists = await User.findOne({ email });
     if (userExists) {
@@ -18,10 +57,13 @@ router.post('/register', async (req, res) => {
 
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
+    const parsedName = parseFullName(name || `${firstName || ''} ${lastName || ''}`.trim(), title || '');
 
-    // FIXED: Explicitly fallback to 'member' to comply with your default rules schema
     const newUserPayload = {
-      name,
+      title: title || parsedName.title || '',
+      firstName: String(firstName || parsedName.firstName || '').trim(),
+      lastName: String(lastName || parsedName.lastName || '').trim(),
+      name: String(name || parsedName.name || '').trim() || [parsedName.title, parsedName.firstName, parsedName.lastName].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim(),
       email,
       password: hashedPassword,
       role: normalizeUserRole(role || 'member'),
@@ -75,15 +117,26 @@ router.post('/login', async (req, res) => {
     }
 
     const token = jwt.sign(
-      { id: user._id, role: normalizedRole },
+      {
+        id: user._id,
+        role: normalizedRole,
+        title: user.title || '',
+        firstName: user.firstName || '',
+        lastName: user.lastName || '',
+        name: user.name || [user.title, user.firstName, user.lastName].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim(),
+        email: user.email,
+        parish: user.parish || '',
+        phone: user.phone || ''
+      },
       process.env.JWT_SECRET,
       { expiresIn: '24h' }
     );
 
-    res.json({ 
-      name: user.name, 
-      role: normalizedRole, 
-      token 
+    res.json({
+      id: user._id,
+      name: user.name || [user.title, user.firstName, user.lastName].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim(),
+      role: normalizedRole,
+      token
     });
   } catch (err) {
     console.error(err);

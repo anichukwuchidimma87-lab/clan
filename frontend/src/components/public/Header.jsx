@@ -24,6 +24,17 @@ function Header() {
     try { return JSON.parse(atob(token.split('.')[1])); } catch { return null; }
   };
 
+  const formatUserName = (payload) => {
+    const fullName = [payload?.title || '', payload?.firstName || '', payload?.lastName || '', payload?.name || '']
+      .filter(Boolean)
+      .join(' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    if (fullName) return fullName;
+    return `${payload?.title || 'Mr.'} ${payload?.firstName || ''} ${payload?.lastName || ''}`.trim() || 'Member';
+  };
+
   useEffect(() => {
     const loadFromStorage = () => {
       const t = localStorage.getItem('clan_token') || localStorage.getItem('authToken') || localStorage.getItem('token');
@@ -31,7 +42,7 @@ function Header() {
         const p = parseJwt(t);
         if (p) {
           setUser({
-            name: `${p.title || 'Mr.'} ${p.firstName || ''} ${p.lastName || ''}`.trim(),
+            name: formatUserName(p),
             role: p.role || 'member',
             parish: p.parish || '',
             isLoggedIn: true
@@ -177,6 +188,12 @@ function Header() {
           >
             Leadership
           </button>
+          {(user.role === 'executive' || user.role === 'superadmin' || user.role === 'admin') && (
+            <>
+              <button type="button" onClick={() => goTo('/admin/audit')} className="text-sm font-semibold text-slate-700 hover:text-slate-900 transition">Audit Logs</button>
+              <button type="button" onClick={() => goTo('/admin/deanery-targets')} className="text-sm font-semibold text-slate-700 hover:text-slate-900 transition">Deanery Targets</button>
+            </>
+          )}
           {user.isLoggedIn && (
             <button
               type="button"
@@ -211,7 +228,13 @@ function Header() {
             <>
               <div className="hidden md:flex items-center gap-3">
                 <div className="text-right flex flex-col items-end">
-                  <span className="font-bold text-gray-900 text-sm">{user.name || 'Member'}</span>
+                  <button
+                    type="button"
+                    onClick={() => goTo('/profile')}
+                    className="font-bold text-gray-900 text-sm hover:text-indigo-700 transition"
+                  >
+                    {user.name || 'Member'}
+                  </button>
                   <span className="text-[10px] text-indigo-600 uppercase font-bold px-2 py-0.5 rounded bg-indigo-50 border border-indigo-100">{user.role}</span>
                 </div>
                 <button
@@ -299,6 +322,12 @@ function Header() {
             >
               Leadership
             </button>
+            {(user.role === 'executive' || user.role === 'superadmin' || user.role === 'admin') && (
+              <>
+                <button type="button" onClick={() => goTo('/admin/audit')} className="w-full rounded-2xl px-4 py-3 text-left text-sm font-semibold text-slate-700 hover:bg-slate-100 transition">Audit Logs</button>
+                <button type="button" onClick={() => goTo('/admin/deanery-targets')} className="w-full rounded-2xl px-4 py-3 text-left text-sm font-semibold text-slate-700 hover:bg-slate-100 transition">Deanery Targets</button>
+              </>
+            )}
             {!user.isLoggedIn && (
               <>
                 <button

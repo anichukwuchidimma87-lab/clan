@@ -11,6 +11,7 @@ const RestrictedSidebar = ({ isVisible, user, navigate }) => {
   const canApprove = ['superadmin', 'executive'].includes(normalizedRole);
   const canViewRegistry = ['superadmin', 'executive', 'president'].includes(normalizedRole);
   const canViewLedger = ['superadmin', 'executive', 'president'].includes(normalizedRole);
+  const canAccessSettings = ['superadmin', 'executive'].includes(normalizedRole);
 
   return (
     <aside className="w-64 bg-indigo-950 p-6 flex flex-col gap-5 text-gray-200 min-h-screen border-r border-indigo-900 shadow-xl">
@@ -54,7 +55,9 @@ const RestrictedSidebar = ({ isVisible, user, navigate }) => {
       </nav>
 
       <div className="border-t border-indigo-800 pt-4 mt-4 space-y-2">
-        <button onClick={() => navigate('/settings')} className="w-full text-left flex items-center gap-3 p-2.5 rounded text-gray-400 text-xs font-semibold hover:bg-indigo-700 hover:text-white transition">⚙️ Local Profile Settings</button>
+        {canAccessSettings && (
+          <button onClick={() => navigate('/settings')} className="w-full text-left flex items-center gap-3 p-2.5 rounded text-gray-400 text-xs font-semibold hover:bg-indigo-700 hover:text-white transition">⚙️ Local Profile Settings</button>
+        )}
         <button 
           onClick={() => { localStorage.removeItem('clan_token'); navigate('/login'); }} 
           className="w-full text-left flex items-center gap-3 p-2.5 rounded bg-amber-500/10 text-amber-500 text-xs font-bold hover:bg-amber-500 hover:text-indigo-950 transition"
@@ -69,6 +72,7 @@ const RestrictedSidebar = ({ isVisible, user, navigate }) => {
 export default function Dashboard() {
   const [user, setUser] = useState({ name: '', role: '', position: '', parish: '', isLoggedIn: false });
   const [registryCount, setRegistryCount] = useState(0);
+  const [parishCount, setParishCount] = useState(0);
   const [executiveCouncil, setExecutiveCouncil] = useState([]);
   const [logoUrl, setLogoUrl] = useState('');
   const navigate = useNavigate();
@@ -102,25 +106,39 @@ export default function Dashboard() {
     try { return JSON.parse(atob(token.split('.')[1])); } catch (e) { return null; }
   };
 
+  const formatUserName = (payload) => {
+    const fullName = [payload?.title || '', payload?.firstName || '', payload?.lastName || '', payload?.name || '']
+      .filter(Boolean)
+      .join(' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    if (fullName) return fullName;
+    return `${payload?.title || 'Mr.'} ${payload?.firstName || ''} ${payload?.lastName || ''}`.trim() || 'Member';
+  };
+
   useEffect(() => {
     const checkStatus = async () => {
       const token = localStorage.getItem('clan_token');
       if (token) {
         const payload = parseJwt(token);
         if (payload) {
-          setUser({ 
-            name: `${payload.title || 'Mr.'} ${payload.firstName} ${payload.lastName}`, 
-            role: payload.role, 
+          setUser({
+            name: formatUserName(payload),
+            role: payload.role,
             position: payload.position || 'Member',
-            parish: payload.parish, 
-            isLoggedIn: true 
+            parish: payload.parish,
+            isLoggedIn: true
           });
         }
       }
 
       try {
         const countData = await safeFetch(`${apiBase}/api/public/stats`);
-        if (countData.success) setRegistryCount(countData.data.totalLectors);
+        if (countData.success) {
+          setRegistryCount(countData.data.totalLectors || 0);
+          setParishCount(countData.data.totalParishes || 0);
+        }
       } catch (err) { console.error('Stats error', err.message || err); }
 
       try {
@@ -167,7 +185,13 @@ export default function Dashboard() {
             {user.isLoggedIn ? (
               <>
                 <div className="text-right flex flex-col items-end">
-                  <span className="font-bold text-gray-900 text-sm">{user.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => navigate('/profile')}
+                    className="font-bold text-gray-900 text-sm hover:text-indigo-700 transition"
+                  >
+                    {user.name}
+                  </button>
                   <span className="text-[10px] text-indigo-600 uppercase font-bold px-2 py-0.5 rounded bg-indigo-50 border border-indigo-100">{user.role} clearance • {user.parish}</span>
                 </div>
                 <button 
@@ -202,7 +226,7 @@ export default function Dashboard() {
                 Welcome to CLAN <span className="text-indigo-600 font-black">Benin City Deanery Hub Portal</span>
               </h2>
               <p className="text-sm font-medium text-gray-600 max-w-3xl leading-relaxed">
-                Made up of 42 active parishes across Benin City. We serve, we grow, and we proclaim the Word together as the body of the Catholic Lectors Association of Nigeria (CLAN).
+                Made up of {parishCount || '0'} active parishes across Benin City. We serve, we grow, and we proclaim the Word together as the body of the Catholic Lectors Association of Nigeria (CLAN).
               </p>
             </div>
           </section>
@@ -220,7 +244,7 @@ export default function Dashboard() {
                 <span className="text-3xl p-3 rounded-full bg-indigo-50">⛪</span>
                 <div>
                   <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Structural Deanery Units</p>
-                  <p className="text-2xl font-black text-gray-900 mt-1">42 <span className="text-sm font-normal text-gray-400">Active Parishes Indexed</span></p>
+                  <p className="text-2xl font-black text-gray-900 mt-1">{parishCount || 0} <span className="text-sm font-normal text-gray-400">Active Parishes Indexed</span></p>
                 </div>
               </div>
             </section>

@@ -1,5 +1,7 @@
 import User from '../models/User.js';
 import mongoose from 'mongoose';
+import jwt from 'jsonwebtoken';
+import bcrypt from 'bcryptjs';
 import { normalizeUserRole } from '../utils/roleUtils.js';
 
 const leadershipPositions = [
@@ -17,6 +19,11 @@ const leadershipPositions = [
   'Patron',
   'Patroness'
 ];
+
+const buildDisplayName = ({ title = '', firstName = '', middleName = '', lastName = '' }) => {
+  const fullName = [title, firstName, middleName, lastName].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+  return fullName || 'Executive Member';
+};
 
 export const getPendingUsers = async (req, res) => {
   try {
@@ -113,11 +120,16 @@ export const updateUserRole = async (req, res) => {
 export const createExecutiveMember = async (req, res) => {
   try {
     const {
+      title,
+      firstName,
+      middleName,
+      lastName,
       name,
       email,
       position,
       profileTitle,
       phone,
+      parish,
       executiveSessionStart,
       executiveSessionEnd,
       isCurrentExecutiveSession,
@@ -126,8 +138,12 @@ export const createExecutiveMember = async (req, res) => {
       password
     } = req.body;
 
-    if (!name || !email || !position) {
-      return res.status(400).json({ message: 'Name, email and position are required.' });
+    const normalizedFirstName = String(firstName || '').trim();
+    const normalizedLastName = String(lastName || '').trim();
+    const resolvedName = String(name || '').trim() || buildDisplayName({ title, firstName: normalizedFirstName, middleName: String(middleName || '').trim(), lastName: normalizedLastName });
+
+    if (!resolvedName || !email || !position) {
+      return res.status(400).json({ message: 'Name details, email and position are required.' });
     }
 
     const normalizedEmail = String(email).trim().toLowerCase();
@@ -148,7 +164,11 @@ export const createExecutiveMember = async (req, res) => {
     }
 
     const user = await User.create({
-      name: String(name).trim(),
+      title: String(title || '').trim(),
+      firstName: normalizedFirstName,
+      middleName: String(middleName || '').trim(),
+      lastName: normalizedLastName,
+      name: resolvedName,
       email: normalizedEmail,
       password: password || 'Executive@2026',
       role: 'member',
@@ -156,6 +176,7 @@ export const createExecutiveMember = async (req, res) => {
       position: String(position).trim(),
       profileTitle: profileTitle ? String(profileTitle).trim() : '',
       phone: phone ? String(phone).trim() : '',
+      parish: parish ? String(parish).trim() : '',
       executiveSessionStart: executiveSessionStart !== undefined && executiveSessionStart !== '' ? Number(executiveSessionStart) : null,
       executiveSessionEnd: executiveSessionEnd !== undefined && executiveSessionEnd !== '' ? Number(executiveSessionEnd) : null,
       isCurrentExecutiveSession: Boolean(isCurrentExecutiveSession),
@@ -168,11 +189,16 @@ export const createExecutiveMember = async (req, res) => {
       message: 'Executive member created successfully.',
       user: {
         _id: user._id,
+        title: user.title,
+        firstName: user.firstName,
+        middleName: user.middleName,
+        lastName: user.lastName,
         name: user.name,
         email: user.email,
         position: user.position,
         profileTitle: user.profileTitle,
         phone: user.phone,
+        parish: user.parish,
         executiveSessionStart: user.executiveSessionStart,
         executiveSessionEnd: user.executiveSessionEnd,
         isCurrentExecutiveSession: user.isCurrentExecutiveSession,
@@ -186,23 +212,82 @@ export const createExecutiveMember = async (req, res) => {
   }
 };
 
+export const getUserProfile = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    if (!userId || !mongoose.isValidObjectId(userId)) {
+      return res.status(400).json({ success: false, message: 'Invalid user identifier.' });
+    }
+
+    const requestedUser = await User.findById(userId).select('-password');
+    if (!requestedUser) {
+      return res.status(404).json({ success: false, message: 'User not found.' });
+    }
+
+    const isSelf = req.user && req.user._id.toString() === userId;
+    const isAdmin = ['superadmin', 'executive'].includes(normalizeUserRole(req.user?.role || 'member'));
+
+    if (!isSelf && !isAdmin) {
+      return res.status(403).json({ success: false, message: 'Not authorized to view this profile.' });
+    }
+
+    res.json({
+      success: true,
+      user: {
+        _id: requestedUser._id,
+        title: requestedUser.title,
+        firstName: requestedUser.firstName,
+        middleName: requestedUser.middleName,
+        lastName: requestedUser.lastName,
+        name: requestedUser.name,
+        email: requestedUser.email,
+        role: requestedUser.role,
+        status: requestedUser.status,
+        position: requestedUser.position,
+        profileImage: requestedUser.profileImage,
+        profileTitle: requestedUser.profileTitle,
+        phone: requestedUser.phone,
+        parish: requestedUser.parish,
+        yearCommissioned: requestedUser.yearCommissioned,
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching user profile:', error);
+    res.status(500).json({ success: false, message: 'Server error fetching profile' });
+  }
+};
+
 export const updateUserProfile = async (req, res) => {
   try {
     const { userId } = req.params;
     if (!userId || !mongoose.isValidObjectId(userId)) {
       return res.status(400).json({ success: false, message: 'Invalid user identifier.' });
     }
+
+    const isSelf = req.user && req.user._id.toString() === userId;
+    const isAdmin = ['superadmin', 'executive'].includes(normalizeUserRole(req.user?.role || 'member'));
+
+    if (!isSelf && !isAdmin) {
+      return res.status(403).json({ success: false, message: 'Not authorized to update this profile.' });
+    }
+
     const {
+      title,
+      firstName,
+      middleName,
+      lastName,
       name,
       position,
       profileTitle,
       email,
       phone,
+      parish,
       executiveSessionStart,
       executiveSessionEnd,
       isCurrentExecutiveSession,
       isFeaturedOnHomepage,
-      homepageOrder
+      homepageOrder,
+      password
     } = req.body;
 
     const profileImage = req.file?.path;
@@ -212,8 +297,20 @@ export const updateUserProfile = async (req, res) => {
       return res.status(404).json({ message: 'User not found' });
     }
 
+    const normalizedTitle = title !== undefined ? String(title || '').trim() : user.title || '';
+    const normalizedFirstName = firstName !== undefined ? String(firstName || '').trim() : user.firstName || '';
+    const normalizedMiddleName = middleName !== undefined ? String(middleName || '').trim() : user.middleName || '';
+    const normalizedLastName = lastName !== undefined ? String(lastName || '').trim() : user.lastName || '';
+    const builtName = buildDisplayName({ title: normalizedTitle, firstName: normalizedFirstName, middleName: normalizedMiddleName, lastName: normalizedLastName });
+
+    if (title !== undefined) user.title = normalizedTitle;
+    if (firstName !== undefined) user.firstName = normalizedFirstName;
+    if (middleName !== undefined) user.middleName = normalizedMiddleName;
+    if (lastName !== undefined) user.lastName = normalizedLastName;
     if (name !== undefined && name !== null && String(name).trim()) {
       user.name = String(name).trim();
+    } else {
+      user.name = builtName;
     }
     if (position !== undefined && position !== null && String(position).trim()) {
       user.position = String(position).trim();
@@ -226,6 +323,9 @@ export const updateUserProfile = async (req, res) => {
     }
     if (phone !== undefined) {
       user.phone = phone ? String(phone).trim() : '';
+    }
+    if (parish !== undefined) {
+      user.parish = parish ? String(parish).trim() : '';
     }
     if (executiveSessionStart !== undefined) {
       const start = String(executiveSessionStart).trim();
@@ -258,11 +358,19 @@ export const updateUserProfile = async (req, res) => {
     if (profileImage) {
       user.profileImage = profileImage;
     }
+    if (password && String(password).trim()) {
+      const salt = await bcrypt.genSalt(10);
+      user.password = await bcrypt.hash(String(password).trim(), salt);
+    }
 
     await user.save();
 
     const safeUser = {
       _id: user._id,
+      title: user.title,
+      firstName: user.firstName,
+      middleName: user.middleName,
+      lastName: user.lastName,
       name: user.name,
       email: user.email,
       role: user.role,
@@ -271,6 +379,7 @@ export const updateUserProfile = async (req, res) => {
       profileImage: user.profileImage,
       profileTitle: user.profileTitle,
       phone: user.phone,
+      parish: user.parish,
       yearCommissioned: user.yearCommissioned,
       executiveSessionStart: user.executiveSessionStart,
       executiveSessionEnd: user.executiveSessionEnd,
@@ -279,10 +388,27 @@ export const updateUserProfile = async (req, res) => {
       homepageOrder: user.homepageOrder,
     };
 
+    const token = jwt.sign(
+      {
+        id: user._id,
+        role: user.role,
+        title: user.title || '',
+        firstName: user.firstName || '',
+        lastName: user.lastName || '',
+        name: user.name || [user.title, user.firstName, user.lastName].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim(),
+        email: user.email,
+        parish: user.parish || '',
+        phone: user.phone || ''
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+
     res.json({
       success: true,
       message: 'User profile updated successfully',
       user: safeUser,
+      token,
     });
   } catch (error) {
     console.error('Error updating user profile:', error);
