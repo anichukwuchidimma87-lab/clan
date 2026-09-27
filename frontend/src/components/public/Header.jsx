@@ -97,6 +97,14 @@ function Header() {
 
           <button
             type="button"
+            onClick={() => goTo('/events')}
+            className="text-sm font-semibold text-slate-700 hover:text-slate-900 transition"
+          >
+            Events
+          </button>
+
+          <button
+            type="button"
             onClick={() => goTo('/financials')}
             className="text-sm font-semibold text-slate-700 hover:text-slate-900 transition"
           >
@@ -109,14 +117,6 @@ function Header() {
             className="text-sm font-semibold text-slate-700 hover:text-slate-900 transition"
           >
             Leadership
-          </button>
-
-          <button
-            type="button"
-            onClick={() => goTo('/events')}
-            className="text-sm font-semibold text-slate-700 hover:text-slate-900 transition"
-          >
-            Events
           </button>
         </div>
 
@@ -186,6 +186,13 @@ function Header() {
             </div>
             <button
               type="button"
+              onClick={() => goTo('/events')}
+              className="w-full rounded-2xl px-4 py-3 text-left text-sm font-semibold text-slate-700 hover:bg-slate-100 transition"
+            >
+              Events
+            </button>
+            <button
+              type="button"
               onClick={() => goTo('/financials')}
               className="w-full rounded-2xl px-4 py-3 text-left text-sm font-semibold text-slate-700 hover:bg-slate-100 transition"
             >
@@ -197,13 +204,6 @@ function Header() {
               className="w-full rounded-2xl px-4 py-3 text-left text-sm font-semibold text-slate-700 hover:bg-slate-100 transition"
             >
               Leadership
-            </button>
-            <button
-              type="button"
-              onClick={() => goTo('/events')}
-              className="w-full rounded-2xl px-4 py-3 text-left text-sm font-semibold text-slate-700 hover:bg-slate-100 transition"
-            >
-              Events
             </button>
             {!isAuthenticated && (
               <>
