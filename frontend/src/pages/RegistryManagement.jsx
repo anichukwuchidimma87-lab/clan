@@ -39,6 +39,7 @@ export default function RegistryManagement() {
   const [selectedRows, setSelectedRows] = useState([]);
   const [menuOpenId, setMenuOpenId] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const [totalMembersCount, setTotalMembersCount] = useState(null);
 
   const token = localStorage.getItem('clan_token');
   const parseJwt = (value) => {
@@ -97,6 +98,10 @@ export default function RegistryManagement() {
       const parishesJson = await parishesRes.json();
 
       if (membersJson.success) {
+        // capture authoritative total from backend when available
+        const potentialTotal = membersJson.total || membersJson.totalLectors || membersJson.count || membersJson.totalCount || (membersJson.meta && membersJson.meta.total) || null;
+        if (potentialTotal != null) setTotalMembersCount(Number(potentialTotal));
+
         if (membersJson.scope === 'all') {
           setMembers(membersJson.data || []);
           setPage(membersJson.page || 1);
@@ -142,6 +147,9 @@ export default function RegistryManagement() {
       const res = await fetch(`https://clan-3slh.onrender.com/api/lectors/registry?limit=20&page=1&search=${encodeURIComponent(searchQuery)}`, { headers: { Authorization: `Bearer ${token}` } });
       const json = await res.json();
       if (json.success) {
+        const potentialTotal = json.total || json.totalLectors || json.count || json.totalCount || (json.meta && json.meta.total) || null;
+        if (potentialTotal != null) setTotalMembersCount(Number(potentialTotal));
+
         if (json.scope === 'all') {
           setMembers(json.data || []);
           setPage(json.page || 1);
@@ -167,6 +175,8 @@ export default function RegistryManagement() {
       const res = await fetch(`https://clan-3slh.onrender.com/api/lectors/registry?limit=20&page=${next}&search=${encodeURIComponent(searchQuery)}`, { headers: { Authorization: `Bearer ${token}` } });
       const json = await res.json();
       if (json.success && json.scope === 'all') {
+        const potentialTotal = json.total || json.totalLectors || json.count || json.totalCount || (json.meta && json.meta.total) || null;
+        if (potentialTotal != null) setTotalMembersCount(Number(potentialTotal));
         setMembers(prev => [...prev, ...(json.data || [])]);
         setPage(json.page || next);
         setTotalPages(json.totalPages || totalPages);
@@ -421,7 +431,7 @@ export default function RegistryManagement() {
   };
 
   const summaryStats = useMemo(() => {
-    const totalLectors = members.length;
+    const totalLectors = totalMembersCount ?? members.length;
     const activeLectors = members.filter(member => (member.status || 'Active') === 'Active').length;
     const suspendedLectors = totalLectors - activeLectors;
     const totalParishes = parishes.length;
@@ -434,7 +444,7 @@ export default function RegistryManagement() {
       totalParishes,
       activeParishes
     };
-  }, [members, parishes]);
+  }, [members, parishes, totalMembersCount]);
 
   const parishOptions = useMemo(() => {
     const selected = new Set();
@@ -603,7 +613,7 @@ export default function RegistryManagement() {
               <span className="rounded-full bg-indigo-100 p-2 text-indigo-700">●</span>
             </div>
             <p className="mt-3 text-3xl font-black text-slate-900">{summaryStats.totalLectors}</p>
-            <p className="mt-1 text-[11px] text-slate-500">Visible in current roster</p>
+            <p className="mt-1 text-[11px] text-slate-500">{totalMembersCount ? `${totalMembersCount.toLocaleString()} registered` : 'Visible in current roster'}</p>
           </div>
           <div className="bg-emerald-50 border border-emerald-100 rounded-3xl p-5 shadow-sm hover:shadow-md transition-all">
             <div className="flex items-center justify-between">
@@ -639,7 +649,7 @@ export default function RegistryManagement() {
                   <h2 className="text-xl font-semibold text-slate-900">{activeTab === 'lectors' ? 'Lector Roster' : 'Master Parish Directory'}</h2>
                   <p className="text-xs text-slate-500 mt-1">
                     {activeTab === 'lectors'
-                      ? `Showing ${filteredMembers.length} of ${summaryStats.totalLectors} lectors`
+                      ? `Showing ${displayRows.length} of ${totalMembersCount ?? summaryStats.totalLectors} lectors`
                       : `Showing ${filteredParishes.length} of ${summaryStats.totalParishes} parishes`}
                   </p>
                 </div>
@@ -826,7 +836,7 @@ export default function RegistryManagement() {
                   </table>
                 </div>
                 <div className="p-4 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
-                  <p className="text-[11px] text-slate-500">Showing {displayRows.length} of {filteredMembers.length} records</p>
+                  <p className="text-[11px] text-slate-500">Showing {displayRows.length} of {totalMembersCount ?? filteredMembers.length} records</p>
                   <div className="flex items-center gap-2">
                     <button onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} disabled={currentPage === 1} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-600 disabled:opacity-40">Prev</button>
                     {[...Array(pages)].map((_, index) => (
