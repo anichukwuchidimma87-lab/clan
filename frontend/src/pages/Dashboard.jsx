@@ -55,9 +55,6 @@ const RestrictedSidebar = ({ isVisible, user, navigate }) => {
       </nav>
 
       <div className="border-t border-indigo-800 pt-4 mt-4 space-y-2">
-        {canAccessSettings && (
-          <button onClick={() => navigate('/settings')} className="w-full text-left flex items-center gap-3 p-2.5 rounded text-gray-400 text-xs font-semibold hover:bg-indigo-700 hover:text-white transition">⚙️ Local Profile Settings</button>
-        )}
         <button 
           onClick={() => { localStorage.removeItem('clan_token'); navigate('/login'); }} 
           className="w-full text-left flex items-center gap-3 p-2.5 rounded bg-amber-500/10 text-amber-500 text-xs font-bold hover:bg-amber-500 hover:text-indigo-950 transition"

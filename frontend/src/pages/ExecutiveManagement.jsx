@@ -100,6 +100,7 @@ export default function ExecutiveManagement() {
   const [formData, setFormData] = useState(emptyForm());
   const [creating, setCreating] = useState(false);
   const [showModal, setShowModal] = useState(false);
+  const [parishes, setParishes] = useState([]);
 
   const apiBase = import.meta.env.VITE_API_URL || 'https://clan-3slh.onrender.com';
 
@@ -157,14 +158,36 @@ export default function ExecutiveManagement() {
     }
   };
 
+  const fetchParishes = async () => {
+    try {
+      const token = localStorage.getItem('clan_token');
+      const response = await fetch(`${apiBase}/api/v1/parishes`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to load parishes');
+      }
+      const availableParishes = (data.data || []).map((parish) => parish.name || parish.parishName || '').filter(Boolean);
+      setParishes(Array.from(new Set(availableParishes)).sort((a, b) => a.localeCompare(b)));
+    } catch (error) {
+      console.error('Failed to fetch parishes:', error);
+      setParishes([]);
+    }
+  };
+
   useEffect(() => {
     fetchApprovedUsers();
+    fetchParishes();
   }, []);
 
   const openForCreate = () => {
     setCreating(true);
     setEditingId(null);
-    setFormData(emptyForm());
+    setFormData({
+      ...emptyForm(),
+      parish: parishes[0] || ''
+    });
     setShowModal(true);
   };
 
@@ -183,7 +206,7 @@ export default function ExecutiveManagement() {
       profileTitle: user.profileTitle || '',
       email: user.email || '',
       phone: user.phone || '',
-      parish: user.parish || '',
+      parish: user.parish || parishes[0] || '',
       executiveSessionStart: user.executiveSessionStart ?? sessionStart,
       executiveSessionEnd: user.executiveSessionEnd ?? sessionEnd,
       isCurrentExecutiveSession: user.isCurrentExecutiveSession ?? true,
@@ -431,8 +454,13 @@ export default function ExecutiveManagement() {
 
             <div>
               <label className="block text-xs font-bold uppercase tracking-[0.2em] text-slate-500 mb-2">Parish</label>
-              <input type="text" value={formData.parish} onChange={(e) => setFormData({ ...formData, parish: e.target.value })} placeholder="e.g. Holy Trinity"
-                className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-200"/>
+              <select value={formData.parish || ''} onChange={(e) => setFormData({ ...formData, parish: e.target.value })}
+                className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-200">
+                <option value="">Select parish</option>
+                {parishes.map((parish) => (
+                  <option key={parish} value={parish}>{parish}</option>
+                ))}
+              </select>
             </div>
 
             <div>

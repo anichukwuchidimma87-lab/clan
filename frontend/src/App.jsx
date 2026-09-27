@@ -16,7 +16,6 @@ import Users from './pages/Users';
 import AdminControl from './pages/AdminControl';
 import AdminContent from './pages/AdminContent';
 import ExecutiveManagement from './pages/ExecutiveManagement';
-import Settings from './pages/Settings';
 import EventCalendar from './pages/EventCalendar';
 import Profile from './pages/Profile';
 
@@ -63,7 +62,7 @@ function App() {
         <Route path="/admin/content/:section" element={<RoleGate allow={['superadmin', 'executive']}><AdminContent /></RoleGate>} />
         <Route path="/events" element={<RoleGate allow={['superadmin', 'executive']}><EventCalendar /></RoleGate>} />
         <Route path="/checkin" element={<CheckIn />} />
-        <Route path="/settings" element={<RoleGate allow={['superadmin', 'executive']}><Settings /></RoleGate>} />
+        <Route path="/settings" element={<Navigate to="/admin/control" replace />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Router>
