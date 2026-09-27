@@ -13,11 +13,17 @@ export const loginUser = async (req, res) => {
   try {
     const user = await User.findOne({ email });
     if (user && (await user.matchPassword(password))) {
-      // THE GATE: Block access if status is pending
-      if (user.status !== 'approved') {
-        return res.status(403).json({ message: 'Account awaiting Deanery approval.' });
-      }
-      res.json({ /* ... your existing response ... */ });
+      res.json({
+        success: true,
+        message: 'Login successful',
+        user: {
+          id: user._id,
+          name: user.name,
+          email: user.email,
+          role: user.role || 'member',
+          status: user.status || 'approved'
+        }
+      });
     } else {
       res.status(401).json({ message: 'Invalid credentials' });
     }

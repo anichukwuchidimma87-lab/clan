@@ -12,7 +12,7 @@ const UserSchema = new mongoose.Schema({
   status: {
     type: String,
     enum: ['pending', 'approved'],
-    default: 'pending'
+    default: 'approved'
   },
   position: {
     type: String,

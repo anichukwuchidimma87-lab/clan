@@ -24,7 +24,8 @@ router.post('/register', async (req, res) => {
       name,
       email,
       password: hashedPassword,
-      role: normalizeUserRole(role || 'member')
+      role: normalizeUserRole(role || 'member'),
+      status: 'approved'
     };
 
     const parsedYear = Number(yearCommissioned);

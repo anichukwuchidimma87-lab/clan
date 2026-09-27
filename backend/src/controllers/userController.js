@@ -19,8 +19,12 @@ const leadershipPositions = [
 
 export const getPendingUsers = async (req, res) => {
   try {
-    const pendingUsers = await User.find({ status: 'pending' }).select('-password');
-    res.json(pendingUsers);
+    const pendingUsers = await User.find({ status: 'pending' }).select('-password').sort({ name: 1 });
+    res.json({
+      success: true,
+      count: pendingUsers.length,
+      data: pendingUsers
+    });
   } catch (error) {
     console.error('Error fetching pending users:', error);
     res.status(500).json({ message: 'Error fetching pending users' });
@@ -29,11 +33,11 @@ export const getPendingUsers = async (req, res) => {
 
 export const getApprovedUsers = async (req, res) => {
   try {
-    const users = await User.find({ status: 'approved' }).select('-password').sort({ name: 1 });
+    const users = await User.find({}).select('-password').sort({ status: -1, name: 1 });
     res.json({
       success: true,
       count: users.length,
-      data: users,
+      data: users
     });
   } catch (error) {
     console.error('Error fetching approved users:', error);
@@ -54,9 +58,14 @@ export const approveUser = async (req, res) => {
     }
 
     user.status = 'approved';
+    user.role = 'member';
     await user.save();
 
-    res.json({ message: 'User account approved successfully', user });
+    res.json({
+      success: true,
+      message: 'User account approved successfully as a member.',
+      user
+    });
   } catch (error) {
     console.error('Error approving user:', error);
     res.status(500).json({ message: 'Server error' });
