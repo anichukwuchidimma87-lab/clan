@@ -8,15 +8,27 @@ export default function Settings() {
   const [loading, setLoading] = useState(false);
 
   const token = localStorage.getItem('clan_token');
+  const apiBase = import.meta.env.VITE_API_URL || 'https://clan-3slh.onrender.com';
+
+  const safeFetch = async (input, init) => {
+    const res = await fetch(input, init);
+    const ct = res.headers.get('content-type') || '';
+    const text = await res.text();
+    if (!res.ok) {
+      try { const j = JSON.parse(text); throw new Error(j.message || JSON.stringify(j)); } catch (_) { throw new Error(text || `${res.status} ${res.statusText}`); }
+    }
+    if (ct.includes('application/json')) return JSON.parse(text);
+    try { return JSON.parse(text); } catch { return { success: true, data: text }; }
+  };
 
   useEffect(() => {
     const fetchSettings = async () => {
       try {
-        const res = await fetch('https://clan-3slh.onrender.com/api/public/settings');
-        const data = await res.json();
+        const data = await safeFetch(`${apiBase}/api/public/settings`);
         if (data.success && data.data) setLogoUrl(data.data.logoUrl || '');
       } catch (err) {
-        console.error('Failed to fetch settings', err);
+        console.error('Failed to fetch settings', err.message || err);
+        setStatus('Could not load site settings.');
       }
     };
     fetchSettings();
@@ -30,12 +42,11 @@ export default function Settings() {
     try {
       const fd = new FormData();
       fd.append('logo', file);
-      const res = await fetch('https://clan-3slh.onrender.com/api/v1/settings/logo', {
+      const data = await safeFetch(`${apiBase}/api/v1/settings/logo`, {
         method: 'PATCH',
         headers: { Authorization: `Bearer ${token}` },
         body: fd,
       });
-      const data = await res.json();
       if (data.success) {
         setLogoUrl(data.data.logoUrl || '');
         setStatus('Logo uploaded successfully.');
@@ -43,8 +54,8 @@ export default function Settings() {
         setStatus(data.message || 'Upload failed.');
       }
     } catch (err) {
-      console.error(err);
-      setStatus('Upload error.');
+      console.error('Upload error', err.message || err);
+      setStatus(err.message || 'Upload error.');
     } finally { setLoading(false); }
   };
 
@@ -52,12 +63,11 @@ export default function Settings() {
     if (!externalUrl) return setStatus('Please enter an image URL.');
     setLoading(true); setStatus('Saving URL...');
     try {
-      const res = await fetch('https://clan-3slh.onrender.com/api/v1/settings/logo-url', {
+      const data = await safeFetch(`${apiBase}/api/v1/settings/logo-url`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ logoUrl: externalUrl }),
       });
-      const data = await res.json();
       if (data.success) {
         setLogoUrl(data.data.logoUrl || '');
         setStatus('Logo URL saved.');
@@ -65,8 +75,8 @@ export default function Settings() {
         setStatus(data.message || 'Failed to save URL.');
       }
     } catch (err) {
-      console.error(err);
-      setStatus('Error saving URL.');
+      console.error('Save URL error', err.message || err);
+      setStatus(err.message || 'Error saving URL.');
     } finally { setLoading(false); }
   };
 

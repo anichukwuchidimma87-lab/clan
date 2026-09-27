@@ -62,6 +62,18 @@ export default function Dashboard() {
   const [registryCount, setRegistryCount] = useState(0);
   const [logoUrl, setLogoUrl] = useState('');
   const navigate = useNavigate();
+  const apiBase = import.meta.env.VITE_API_URL || 'https://clan-3slh.onrender.com';
+
+  const safeFetch = async (input, init) => {
+    const res = await fetch(input, init);
+    const ct = res.headers.get('content-type') || '';
+    const text = await res.text();
+    if (!res.ok) {
+      try { const j = JSON.parse(text); throw new Error(j.message || JSON.stringify(j)); } catch (_) { throw new Error(text || `${res.status} ${res.statusText}`); }
+    }
+    if (ct.includes('application/json')) return JSON.parse(text);
+    try { return JSON.parse(text); } catch { return { success: true, data: text }; }
+  };
 
   const executives = [
     { name: "Mr. Abatsu Michael", role: "President", parish: "Holy Trinity" },
@@ -97,19 +109,17 @@ export default function Dashboard() {
       }
 
       try {
-        const resCount = await fetch('https://clan-3slh.onrender.com/api/public/stats');
-        const countData = await resCount.json();
+        const countData = await safeFetch(`${apiBase}/api/public/stats`);
         if (countData.success) setRegistryCount(countData.data.totalLectors);
-      } catch (err) { console.error(err); }
+      } catch (err) { console.error('Stats error', err.message || err); }
     };
     checkStatus();
     // fetch public settings (logo)
     (async () => {
       try {
-        const res = await fetch('https://clan-3slh.onrender.com/api/public/settings');
-        const data = await res.json();
+        const data = await safeFetch(`${apiBase}/api/public/settings`);
         if (data.success && data.data) setLogoUrl(data.data.logoUrl || '');
-      } catch (e) { console.error('Failed to fetch site settings', e); }
+      } catch (e) { console.error('Failed to fetch site settings', e.message || e); }
     })();
   }, []);
 
