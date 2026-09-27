@@ -17,11 +17,14 @@ const buildName = (user = {}) => {
   return combined || user.name || 'Member';
 };
 
+const titleOptions = ['Mr.', 'Mrs.', 'Miss', 'Ms.', 'Dr.', 'Rev.', 'Fr.', 'Prof.'];
+
 export default function Profile() {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [parishes, setParishes] = useState([]);
   const [message, setMessage] = useState('');
   const [form, setForm] = useState({
     title: '',
@@ -46,7 +49,7 @@ export default function Profile() {
 
     const fetchProfile = async () => {
       try {
-        const res = await fetch(`${apiBase}/api/v1/users/profile/${payload.id}`, {
+        const res = await fetch(`${apiBase}/api/v1/users/me`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         const data = await res.json();
@@ -74,6 +77,28 @@ export default function Profile() {
 
     fetchProfile();
   }, [navigate, token]);
+
+  useEffect(() => {
+    const fetchParishes = async () => {
+      try {
+        const res = await fetch(`${apiBase}/api/lectors/parishes-list`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || 'Unable to load parishes');
+
+        const entries = Array.isArray(data.data) ? data.data : [];
+        const parishNames = entries
+          .map((parish) => parish.name || '')
+          .filter(Boolean)
+          .sort((a, b) => a.localeCompare(b));
+
+        setParishes(parishNames);
+      } catch (err) {
+        console.error('Failed to load parishes:', err);
+      }
+    };
+
+    fetchParishes();
+  }, []);
 
   const handleChange = (field, value) => {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -170,11 +195,29 @@ export default function Profile() {
           <div className="grid gap-4 md:grid-cols-2">
             <label className="space-y-2 text-sm font-semibold text-slate-700">
               <span>Title</span>
-              <input value={form.title} onChange={(e) => handleChange('title', e.target.value)} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3" placeholder="Mr., Mrs., Rev., etc." />
+              <select
+                value={form.title}
+                onChange={(e) => handleChange('title', e.target.value)}
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"
+              >
+                <option value="">Select title</option>
+                {titleOptions.map((title) => (
+                  <option key={title} value={title}>{title}</option>
+                ))}
+              </select>
             </label>
             <label className="space-y-2 text-sm font-semibold text-slate-700">
               <span>Parish</span>
-              <input value={form.parish} onChange={(e) => handleChange('parish', e.target.value)} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3" placeholder="Parish" />
+              <select
+                value={form.parish}
+                onChange={(e) => handleChange('parish', e.target.value)}
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"
+              >
+                <option value="">Select parish</option>
+                {parishes.map((parish) => (
+                  <option key={parish} value={parish}>{parish}</option>
+                ))}
+              </select>
             </label>
             <label className="space-y-2 text-sm font-semibold text-slate-700">
               <span>First name</span>

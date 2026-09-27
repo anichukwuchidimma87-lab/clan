@@ -212,6 +212,39 @@ export const createExecutiveMember = async (req, res) => {
   }
 };
 
+export const getCurrentUserProfile = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id).select('-password');
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found.' });
+    }
+
+    return res.json({
+      success: true,
+      user: {
+        _id: user._id,
+        title: user.title || '',
+        firstName: user.firstName || '',
+        middleName: user.middleName || '',
+        lastName: user.lastName || '',
+        name: user.name || '',
+        email: user.email || '',
+        role: user.role || 'member',
+        status: user.status || 'approved',
+        position: user.position || 'Member',
+        profileImage: user.profileImage || '',
+        profileTitle: user.profileTitle || '',
+        phone: user.phone || '',
+        parish: user.parish || '',
+        yearCommissioned: user.yearCommissioned || null,
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching current user profile:', error);
+    return res.status(500).json({ success: false, message: 'Server error fetching profile' });
+  }
+};
+
 export const getUserProfile = async (req, res) => {
   try {
     const { userId } = req.params;

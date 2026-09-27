@@ -15,6 +15,7 @@ const router = express.Router();
 
 router.get('/', protect, authorizeApproval, getApprovedUsers);
 router.get('/pending', protect, authorizeApproval, getPendingUsers);
+router.get('/me', protect, getCurrentUserProfile);
 router.get('/profile/:userId', protect, getUserProfile);
 router.patch('/approve/:id', protect, authorizeApproval, approveUser);
 router.patch('/:id/role', protect, authorizeApproval, updateUserRole);
