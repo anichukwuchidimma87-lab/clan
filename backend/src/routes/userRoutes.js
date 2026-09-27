@@ -4,6 +4,7 @@ import {
   getApprovedUsers,
   approveUser,
   createExecutiveMember,
+  getCurrentUserProfile,
   getUserProfile,
   updateUserProfile,
   updateUserRole

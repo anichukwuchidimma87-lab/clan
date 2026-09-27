@@ -3,6 +3,7 @@ import { protect, authorize } from '../middleware/authMiddleware.js';
 import {
   getParishes,
   getParishesWithCounts,
+  getInactiveParishesReport,
   createParish,
   updateParish,
   deleteParish,
