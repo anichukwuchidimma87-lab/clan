@@ -110,6 +110,14 @@ function Header() {
           >
             Leadership
           </button>
+
+          <button
+            type="button"
+            onClick={() => goTo('/events')}
+            className="text-sm font-semibold text-slate-700 hover:text-slate-900 transition"
+          >
+            Events
+          </button>
         </div>
 
         <div className="flex items-center gap-3">
@@ -189,6 +197,13 @@ function Header() {
               className="w-full rounded-2xl px-4 py-3 text-left text-sm font-semibold text-slate-700 hover:bg-slate-100 transition"
             >
               Leadership
+            </button>
+            <button
+              type="button"
+              onClick={() => goTo('/events')}
+              className="w-full rounded-2xl px-4 py-3 text-left text-sm font-semibold text-slate-700 hover:bg-slate-100 transition"
+            >
+              Events
             </button>
             {!isAuthenticated && (
               <>
