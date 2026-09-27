@@ -15,6 +15,7 @@ function Header() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [galleryDropdownOpen, setGalleryDropdownOpen] = useState(false);
   const menuRef = useRef(null);
+  const [logoUrl, setLogoUrl] = useState('');
 
   const isAuthenticated = Boolean(localStorage.getItem('authToken') || localStorage.getItem('token'));
 
@@ -32,6 +33,30 @@ function Header() {
     setMobileOpen(false);
     setGalleryDropdownOpen(false);
   }, [location.pathname]);
+
+  // fetch public site settings (logo)
+  useEffect(() => {
+    const apiBase = import.meta.env.VITE_API_URL || '';
+    let mounted = true;
+    (async () => {
+      try {
+        const res = await fetch(`${apiBase}/api/public/settings`);
+        const ct = res.headers.get('content-type') || '';
+        const text = await res.text();
+        if (!res.ok) return;
+        let json;
+        if (ct.includes('application/json')) json = JSON.parse(text);
+        else {
+          try { json = JSON.parse(text); } catch { json = { success: true, data: text }; }
+        }
+        const data = json?.data || {};
+        if (mounted) setLogoUrl(data.logoUrl || '');
+      } catch (e) {
+        console.error('Failed to fetch site settings', e);
+      }
+    })();
+    return () => { mounted = false; };
+  }, []);
 
   const goTo = (path) => {
     navigate(path);
@@ -52,9 +77,14 @@ function Header() {
           <button
             type="button"
             onClick={() => goTo('/')}
-            className="text-lg font-bold tracking-tight text-slate-900"
+            className="flex items-center gap-3"
           >
-            CLAN Premium
+            {logoUrl ? (
+              <img src={logoUrl} alt="CLAN logo" className="h-10 w-10 rounded object-cover" />
+            ) : (
+              <span className="text-lg font-bold tracking-tight text-slate-900">CLAN Premium</span>
+            )}
+            <span className="hidden md:inline text-lg font-bold tracking-tight text-slate-900">CLAN Premium</span>
           </button>
           <span className="hidden text-sm text-slate-500 md:inline">Community Portal</span>
         </div>
