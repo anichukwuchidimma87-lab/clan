@@ -17,7 +17,12 @@ function Header() {
   const menuRef = useRef(null);
   const [logoUrl, setLogoUrl] = useState('');
 
-  const isAuthenticated = Boolean(localStorage.getItem('authToken') || localStorage.getItem('token'));
+  // Support legacy keys and the app's token key `clan_token`
+  const isAuthenticated = Boolean(
+    localStorage.getItem('clan_token') ||
+    localStorage.getItem('authToken') ||
+    localStorage.getItem('token')
+  );
 
   useEffect(() => {
     const handleClickOutside = (event) => {
