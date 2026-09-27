@@ -127,6 +127,11 @@ export default function ExecutiveManagement() {
     event.preventDefault();
     const token = localStorage.getItem('clan_token');
 
+    // Prevent submitting an update when no member is selected for editing
+    if (!creating && !editingId) {
+      setMessage({ text: 'No executive selected to update. Please pick a member to edit or use "Add Executive".', isError: true });
+      return;
+    }
     try {
       const payload = {
         ...formData,
@@ -423,7 +428,8 @@ export default function ExecutiveManagement() {
                 <div className="flex gap-3 pt-2">
                   <button
                     type="submit"
-                    className="flex-1 bg-indigo-600 text-white px-4 py-2.5 rounded-xl text-sm font-bold hover:bg-indigo-700"
+                    disabled={!creating && !editingId}
+                    className={`flex-1 bg-indigo-600 text-white px-4 py-2.5 rounded-xl text-sm font-bold hover:bg-indigo-700 ${(!creating && !editingId) ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
                     {creating ? 'Create Executive' : 'Save Changes'}
                   </button>

@@ -1,4 +1,5 @@
 import User from '../models/User.js';
+import mongoose from 'mongoose';
 import { normalizeUserRole } from '../utils/roleUtils.js';
 
 const leadershipPositions = [
@@ -188,6 +189,9 @@ export const createExecutiveMember = async (req, res) => {
 export const updateUserProfile = async (req, res) => {
   try {
     const { userId } = req.params;
+    if (!userId || !mongoose.isValidObjectId(userId)) {
+      return res.status(400).json({ success: false, message: 'Invalid user identifier.' });
+    }
     const {
       name,
       position,
