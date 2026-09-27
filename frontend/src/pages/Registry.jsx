@@ -174,7 +174,8 @@ export default function Registry() {
 
   if (loading) return <div className="p-8 text-center text-xs font-bold text-gray-400">Compiling Benin Deanery Registry...</div>;
 
-  const isAdminOrHigher = userRole === 'admin' || userRole === 'superadmin';
+  const normalizedRole = userRole === 'admin' ? 'executive' : (userRole || 'member');
+  const isAdminOrHigher = normalizedRole === 'executive' || normalizedRole === 'superadmin';
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-5 bg-gray-50 min-h-screen text-xs font-semibold text-gray-600">

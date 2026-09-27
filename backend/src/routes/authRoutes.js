@@ -2,6 +2,7 @@ import express from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
+import { normalizeUserRole } from '../utils/roleUtils.js';
 
 const router = express.Router();
 
@@ -23,7 +24,7 @@ router.post('/register', async (req, res) => {
       name,
       email,
       password: hashedPassword,
-      role: role || 'member'
+      role: normalizeUserRole(role || 'member')
     };
 
     const parsedYear = Number(yearCommissioned);
@@ -66,15 +67,21 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ message: "Invalid credentials" });
     }
 
+    const normalizedRole = normalizeUserRole(user.role);
+    if (user.role !== normalizedRole) {
+      user.role = normalizedRole;
+      await user.save();
+    }
+
     const token = jwt.sign(
-      { id: user._id, role: user.role },
+      { id: user._id, role: normalizedRole },
       process.env.JWT_SECRET,
       { expiresIn: '24h' }
     );
 
     res.json({ 
       name: user.name, 
-      role: user.role, 
+      role: normalizedRole, 
       token 
     });
   } catch (err) {

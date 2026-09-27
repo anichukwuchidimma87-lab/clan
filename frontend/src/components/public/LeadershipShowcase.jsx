@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 
 function LeadershipShowcase() {
-  const [leadership, setLeadership] = useState({ executives: [], patrons: [] });
+  const [leadership, setLeadership] = useState({ executives: [], patrons: [], featuredExecutives: [] });
   const [galleryItems, setGalleryItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -14,12 +14,12 @@ function LeadershipShowcase() {
       try {
         setLoading(true);
         const response = await axios.get(`${apiRoot}/api/public/leadership`);
-        setLeadership(response.data.data || { executives: [], patrons: [] });
+        setLeadership(response.data.data || { executives: [], patrons: [], featuredExecutives: [] });
         setError(null);
       } catch (err) {
         console.error('Error fetching leadership profiles:', err);
         setError('Unable to load leadership profiles');
-        setLeadership({ executives: [], patrons: [] });
+        setLeadership({ executives: [], patrons: [], featuredExecutives: [] });
       } finally {
         setLoading(false);
       }
@@ -28,7 +28,6 @@ function LeadershipShowcase() {
     const fetchExecutiveGallery = async () => {
       try {
         const response = await axios.get(`${apiRoot}/api/public/gallery?category=executives`);
-        console.log('Executive gallery fetch response:', response.data);
         if (response.data?.success) {
           setGalleryItems(response.data.data || []);
         }
@@ -40,6 +39,8 @@ function LeadershipShowcase() {
     fetchLeadership();
     fetchExecutiveGallery();
   }, []);
+
+  const visibleExecutives = leadership.featuredExecutives?.length ? leadership.featuredExecutives : leadership.executives.slice(0, 3);
 
   if (loading) {
     return (
@@ -59,7 +60,6 @@ function LeadershipShowcase() {
 
   const LeadershipCard = ({ member }) => (
     <div className="bg-white rounded-lg shadow-lg overflow-hidden hover:shadow-xl transition duration-300">
-      {/* Profile Image */}
       <div className="relative h-48 bg-gray-200 overflow-hidden">
         {member.profileImage ? (
           <img
@@ -76,7 +76,6 @@ function LeadershipShowcase() {
         )}
       </div>
 
-      {/* Profile Info */}
       <div className="p-4">
         <h3 className="text-lg font-bold text-gray-800">{member.name}</h3>
         <p className="text-sm text-blue-700 font-semibold mb-2">{member.position}</p>
@@ -84,10 +83,7 @@ function LeadershipShowcase() {
           <p className="text-sm text-gray-600 mb-3">{member.profileTitle}</p>
         )}
         {member.email && (
-          <a
-            href={`mailto:${member.email}`}
-            className="text-sm text-blue-600 hover:underline"
-          >
+          <a href={`mailto:${member.email}`} className="text-sm text-blue-600 hover:underline">
             Contact
           </a>
         )}
@@ -97,19 +93,28 @@ function LeadershipShowcase() {
 
   return (
     <div className="space-y-12">
-      {/* Executives */}
-      {leadership.executives.length > 0 && (
+      {visibleExecutives.length > 0 && (
         <div>
-          <h3 className="text-2xl font-bold text-gray-800 mb-6">Executive Members</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {leadership.executives.map((member) => (
+          <h3 className="text-2xl font-bold text-gray-800 mb-6">Featured Contact Leaders</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {visibleExecutives.slice(0, 3).map((member) => (
               <LeadershipCard key={member._id} member={member} />
             ))}
           </div>
         </div>
       )}
 
-      {/* Patrons */}
+      {leadership.executives.length > 0 && !leadership.featuredExecutives?.length && visibleExecutives.length === 0 && (
+        <div>
+          <h3 className="text-2xl font-bold text-gray-800 mb-6">Executive Members</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {leadership.executives.slice(0, 3).map((member) => (
+              <LeadershipCard key={member._id} member={member} />
+            ))}
+          </div>
+        </div>
+      )}
+
       {leadership.patrons.length > 0 && (
         <div>
           <h3 className="text-2xl font-bold text-gray-800 mb-6">Patron & Patroness</h3>
@@ -121,14 +126,13 @@ function LeadershipShowcase() {
         </div>
       )}
 
-      {/* No Leadership Message */}
-      {leadership.executives.length === 0 && leadership.patrons.length === 0 && galleryItems.length === 0 && (
+      {visibleExecutives.length === 0 && leadership.patrons.length === 0 && galleryItems.length === 0 && (
         <div className="text-center py-8 text-gray-500">
           <p>Leadership profiles coming soon</p>
         </div>
       )}
 
-      {galleryItems.length > 0 && (leadership.executives.length === 0 && leadership.patrons.length === 0) && (
+      {galleryItems.length > 0 && visibleExecutives.length === 0 && leadership.patrons.length === 0 && (
         <div>
           <h3 className="text-2xl font-bold text-gray-800 mb-6">Executive Gallery</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

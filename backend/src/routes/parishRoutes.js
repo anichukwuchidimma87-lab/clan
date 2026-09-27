@@ -11,11 +11,11 @@ import {
 
 const router = express.Router();
 
-router.get('/', protect, authorize('admin', 'superadmin'), getParishes);
-router.get('/with-counts', protect, authorize('admin', 'superadmin'), getParishesWithCounts);
-router.post('/', protect, authorize('admin', 'superadmin'), createParish);
-router.patch('/:id', protect, authorize('admin', 'superadmin'), updateParish);
-router.delete('/:id', protect, authorize('admin', 'superadmin'), deleteParish);
-router.get('/:id/members', protect, authorize('admin', 'superadmin'), getParishMembers);
+router.get('/', protect, authorize('executive', 'superadmin'), getParishes);
+router.get('/with-counts', protect, authorize('executive', 'superadmin'), getParishesWithCounts);
+router.post('/', protect, authorize('executive', 'superadmin'), createParish);
+router.patch('/:id', protect, authorize('executive', 'superadmin'), updateParish);
+router.delete('/:id', protect, authorize('executive', 'superadmin'), deleteParish);
+router.get('/:id/members', protect, authorize('executive', 'superadmin'), getParishMembers);
 
 export default router;

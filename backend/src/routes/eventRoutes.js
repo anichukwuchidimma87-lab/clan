@@ -18,13 +18,13 @@ const router = express.Router();
 router.get('/upcoming', getUpcomingEvents);
 router.get('/all', getPublicEvents);
 
-// Admin routes
-router.get('/', protect, authorize('admin', 'superadmin'), getEvents);
-router.post('/', protect, authorize('admin', 'superadmin'), createEvent);
-router.post('/bulk-import', protect, authorize('admin', 'superadmin'), bulkImportEvents);
-router.patch('/:id', protect, authorize('admin', 'superadmin'), updateEvent);
-router.delete('/:id', protect, authorize('admin', 'superadmin'), deleteEvent);
-router.post('/:id/toggle', protect, authorize('admin', 'superadmin'), toggleEventStatus);
-router.get('/:id/generate-caption', protect, authorize('admin', 'superadmin'), generateCaption);
+// Executive routes
+router.get('/', protect, authorize('executive', 'superadmin'), getEvents);
+router.post('/', protect, authorize('executive', 'superadmin'), createEvent);
+router.post('/bulk-import', protect, authorize('executive', 'superadmin'), bulkImportEvents);
+router.patch('/:id', protect, authorize('executive', 'superadmin'), updateEvent);
+router.delete('/:id', protect, authorize('executive', 'superadmin'), deleteEvent);
+router.post('/:id/toggle', protect, authorize('executive', 'superadmin'), toggleEventStatus);
+router.get('/:id/generate-caption', protect, authorize('executive', 'superadmin'), generateCaption);
 
 export default router;

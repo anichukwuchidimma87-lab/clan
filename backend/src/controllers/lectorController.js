@@ -234,7 +234,7 @@ export const getRegistryData = async (req, res) => {
       };
     };
 
-    if (role === 'superadmin' || role === 'admin') {
+    if (role === 'superadmin' || role === 'executive') {
       const filter = {
         deanery: 'Benin',
         ...buildSearchFilter()

@@ -1,10 +1,6 @@
 import User from '../models/User.js';
 import GalleryItem from '../models/GalleryItem.js';
 
-/**
- * Get all executives and leadership team members
- * Public endpoint - no authentication required
- */
 const leadershipPositions = [
   'President',
   'Vice President',
@@ -21,13 +17,45 @@ const leadershipPositions = [
   'Patroness'
 ];
 
+const getCurrentYear = () => new Date().getFullYear();
+
+const buildCurrentSessionFilter = (currentYear = getCurrentYear()) => ({
+  status: 'approved',
+  position: { $in: leadershipPositions },
+  $or: [
+    { isCurrentExecutiveSession: true },
+    { executiveSessionStart: { $lte: currentYear }, executiveSessionEnd: { $gte: currentYear } },
+    { executiveSessionStart: null, executiveSessionEnd: null }
+  ]
+});
+
+const sortAndPrioritize = (members) => [...members].sort((a, b) => {
+  if (Number(b.isFeaturedOnHomepage) !== Number(a.isFeaturedOnHomepage)) {
+    return Number(b.isFeaturedOnHomepage) - Number(a.isFeaturedOnHomepage);
+  }
+
+  if ((Number(a.homepageOrder) || 0) !== (Number(b.homepageOrder) || 0)) {
+    return (Number(a.homepageOrder) || 0) - (Number(b.homepageOrder) || 0);
+  }
+
+  return (a.name || '').localeCompare(b.name || '');
+});
+
 export const getExecutives = async (req, res) => {
   try {
+    const currentYear = getCurrentYear();
     const executives = await User.find({
+      status: 'approved',
       position: {
         $in: leadershipPositions.filter(position => !['Patron', 'Patroness'].includes(position))
-      }
-    }).select('name position profileImage email');
+      },
+      $or: [
+        { isCurrentExecutiveSession: true },
+        { executiveSessionStart: { $lte: currentYear }, executiveSessionEnd: { $gte: currentYear } },
+        { executiveSessionStart: null, executiveSessionEnd: null }
+      ]
+    }).select('name position profileImage email profileTitle phone executiveSessionStart executiveSessionEnd isCurrentExecutiveSession isFeaturedOnHomepage homepageOrder')
+      .sort({ isFeaturedOnHomepage: -1, homepageOrder: 1, name: 1 });
 
     res.status(200).json({
       success: true,
@@ -42,17 +70,12 @@ export const getExecutives = async (req, res) => {
   }
 };
 
-/**
- * Get Patron and Patroness information
- * Public endpoint - no authentication required
- */
 export const getPatrons = async (req, res) => {
   try {
     const patrons = await User.find({
-      position: {
-        $in: ['Patron', 'Patroness']
-      }
-    }).select('name position profileImage email');
+      status: 'approved',
+      position: { $in: ['Patron', 'Patroness'] }
+    }).select('name position profileImage email phone profileTitle executiveSessionStart executiveSessionEnd isCurrentExecutiveSession').sort({ name: 1 });
 
     res.status(200).json({
       success: true,
@@ -67,25 +90,24 @@ export const getPatrons = async (req, res) => {
   }
 };
 
-/**
- * Get all leadership profiles (executives + patrons)
- * Public endpoint for the leadership showcase
- */
 export const getLeadershipProfiles = async (req, res) => {
   try {
-    const leadership = await User.find({
-      position: {
-        $in: leadershipPositions
-      }
-    }).select('name position profileImage email profileTitle').sort({ position: 1, name: 1 });
+    const currentYear = getCurrentYear();
+    const leadership = await User.find(buildCurrentSessionFilter(currentYear)).select('name position profileImage email profileTitle phone executiveSessionStart executiveSessionEnd isCurrentExecutiveSession isFeaturedOnHomepage homepageOrder')
+      .sort({ isFeaturedOnHomepage: -1, homepageOrder: 1, position: 1, name: 1 });
+
+    const executives = sortAndPrioritize(
+      leadership.filter(l => !['Patron', 'Patroness'].includes(l.position))
+    );
+    const patrons = leadership.filter(l => ['Patron', 'Patroness'].includes(l.position));
+
+    const featuredExecutives = executives.filter(member => member.isFeaturedOnHomepage === true).slice(0, 3);
+    const finalFeaturedExecutives = featuredExecutives.length > 0 ? featuredExecutives : executives.slice(0, 3);
 
     const organized = {
-      executives: leadership.filter(l =>
-        !['Patron', 'Patroness'].includes(l.position)
-      ),
-      patrons: leadership.filter(l =>
-        ['Patron', 'Patroness'].includes(l.position)
-      ),
+      executives,
+      featuredExecutives: finalFeaturedExecutives,
+      patrons,
     };
 
     res.status(200).json({
@@ -124,14 +146,8 @@ export const getGalleryByCategory = async (req, res) => {
   }
 };
 
-/**
- * Get recent event images from Cloudinary
- * This will be extended later to fetch from a dedicated Events collection
- */
 export const getRecentEvents = async (req, res) => {
   try {
-    // Placeholder: This will integrate with Cloudinary API or Events model
-    // For now, returning a structure for frontend integration
     const limit = req.query.limit || 4;
 
     res.status(200).json({

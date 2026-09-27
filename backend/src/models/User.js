@@ -4,43 +4,61 @@ const UserSchema = new mongoose.Schema({
   name: { type: String, required: true },
   email: { type: String, required: true, unique: true },
   password: { type: String, required: true },
-  role: { 
-    type: String, 
-    enum: ['superadmin', 'admin', 'member'], 
-    default: 'member' 
+  role: {
+    type: String,
+    enum: ['superadmin', 'executive', 'president', 'member'],
+    default: 'member'
   },
-  // Added fields to support approval workflow
-  status: { 
-    type: String, 
-    enum: ['pending', 'approved'], 
-    default: 'pending' 
+  status: {
+    type: String,
+    enum: ['pending', 'approved'],
+    default: 'pending'
   },
-  position: { 
-    type: String, 
-    default: 'Member' 
+  position: {
+    type: String,
+    default: 'Member'
   },
-  // Profile image URL from Cloudinary
-  profileImage: { 
-    type: String, 
-    default: null 
+  profileImage: {
+    type: String,
+    default: null
   },
-  // Profile title or tagline for leadership showcase
   profileTitle: {
     type: String,
     default: null
+  },
+  phone: {
+    type: String,
+    default: ''
   },
   yearCommissioned: {
     type: Number,
     required: false,
     default: null
+  },
+  executiveSessionStart: {
+    type: Number,
+    default: null
+  },
+  executiveSessionEnd: {
+    type: Number,
+    default: null
+  },
+  isCurrentExecutiveSession: {
+    type: Boolean,
+    default: false
+  },
+  isFeaturedOnHomepage: {
+    type: Boolean,
+    default: false
+  },
+  homepageOrder: {
+    type: Number,
+    default: 0
   }
 });
 
-// Helper method to match password
 UserSchema.methods.matchPassword = async function(enteredPassword) {
-  // Assuming you are using bcrypt
-  // return await bcrypt.compare(enteredPassword, this.password);
-  return enteredPassword === this.password; // Replace with your actual bcrypt logic
+  return enteredPassword === this.password;
 };
 
 const User = mongoose.model('User', UserSchema);

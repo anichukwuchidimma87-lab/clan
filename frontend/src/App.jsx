@@ -8,7 +8,7 @@ import FinancialLedger from './pages/FinancialLedger';
 import Financials from './pages/Financials';
 import GalleryCategory from './pages/GalleryCategory';
 import Leadership from './pages/Leadership';
-import CheckIn from './pages/CheckIn'; // Public submission form
+import CheckIn from './pages/CheckIn';
 import RegistryManagement from './pages/RegistryManagement';
 import Users from './pages/Users';
 import AdminControl from './pages/AdminControl';
@@ -17,35 +17,46 @@ import ExecutiveManagement from './pages/ExecutiveManagement';
 import Settings from './pages/Settings';
 import EventCalendar from './pages/EventCalendar';
 
+const getStoredRole = () => {
+  const token = localStorage.getItem('clan_token');
+  if (!token) return 'member';
+
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    const role = String(payload.role || 'member').toLowerCase();
+    return role === 'admin' ? 'executive' : role;
+  } catch {
+    return 'member';
+  }
+};
+
+const RoleGate = ({ allow, children, redirect = '/dashboard' }) => {
+  const role = getStoredRole();
+  return allow.includes(role) ? children : <Navigate to={redirect} replace />;
+};
+
 function App() {
   return (
     <Router>
       <Header />
       <Routes>
-        {/* Public Landing Page */}
         <Route path="/" element={<Landing />} />
         <Route path="/financials" element={<Financials />} />
         <Route path="/gallery/:category" element={<GalleryCategory />} />
         <Route path="/leadership" element={<Leadership />} />
 
-        {/* Authentication Routes */}
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
-        
-        {/* Core Executive & Admin Hub */}
         <Route path="/dashboard" element={<Dashboard />} />
-        
-        {/* Financial Module */}
-        <Route path="/ledger" element={<FinancialLedger />} />
-        
-        {/* Roster & Registry Database Segregations */}
-        <Route path="/checkin" element={<CheckIn />} />   {/* PUBLIC LINK: Send this to all parishes */}
-        <Route path="/registry" element={<RegistryManagement />} /> {/* SECURE DASHBOARD: Behind the login wall */}
-        <Route path="/users" element={<Users />} /> {/* USER ACCESS MANAGEMENT: For approving new users */}
-        <Route path="/admin/executives" element={<ExecutiveManagement />} />
-        <Route path="/admin/control" element={<AdminControl />} />
-        <Route path="/admin/content/:section" element={<AdminContent />} />
-        <Route path="/events" element={<EventCalendar />} />
+
+        <Route path="/ledger" element={<RoleGate allow={['superadmin', 'executive', 'president']}><FinancialLedger /></RoleGate>} />
+        <Route path="/registry" element={<RoleGate allow={['superadmin', 'executive', 'president']}><RegistryManagement /></RoleGate>} />
+        <Route path="/users" element={<RoleGate allow={['superadmin', 'executive']}><Users /></RoleGate>} />
+        <Route path="/admin/executives" element={<RoleGate allow={['superadmin', 'executive']}><ExecutiveManagement /></RoleGate>} />
+        <Route path="/admin/control" element={<RoleGate allow={['superadmin', 'executive']}><AdminControl /></RoleGate>} />
+        <Route path="/admin/content/:section" element={<RoleGate allow={['superadmin', 'executive']}><AdminContent /></RoleGate>} />
+        <Route path="/events" element={<RoleGate allow={['superadmin', 'executive']}><EventCalendar /></RoleGate>} />
+        <Route path="/checkin" element={<CheckIn />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

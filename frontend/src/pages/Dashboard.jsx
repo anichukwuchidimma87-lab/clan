@@ -5,9 +5,12 @@ import { useNavigate, NavLink } from 'react-router-dom';
 const RestrictedSidebar = ({ isVisible, user, navigate }) => {
   if (!isVisible) return null;
 
-  const isAdmin = user.role === 'admin' || user.role === 'superadmin';
-  const canApprove = user.role === 'superadmin' || 
-    (user.role === 'admin' && ['President', 'Vice President', 'Secretary', 'Assistant Secretary'].includes(user.position));
+  const normalizedRole = user.role === 'admin' ? 'executive' : (user.role || 'member');
+  const isExecutive = normalizedRole === 'executive' || normalizedRole === 'superadmin';
+  const isPresident = normalizedRole === 'president';
+  const canApprove = ['superadmin', 'executive'].includes(normalizedRole);
+  const canViewRegistry = ['superadmin', 'executive', 'president'].includes(normalizedRole);
+  const canViewLedger = ['superadmin', 'executive', 'president'].includes(normalizedRole);
 
   return (
     <aside className="w-64 bg-indigo-950 p-6 flex flex-col gap-5 text-gray-200 min-h-screen border-r border-indigo-900 shadow-xl">
@@ -21,23 +24,28 @@ const RestrictedSidebar = ({ isVisible, user, navigate }) => {
           Core Registry
         </div>
         <NavLink to="/dashboard" end className={({ isActive }) => `flex items-center gap-3 p-3 rounded-lg font-semibold text-xs ${isActive ? 'bg-indigo-600 text-white shadow-sm' : 'hover:bg-indigo-700'}`}>🏠 Welcome Page</NavLink>
-        <NavLink to="/registry" className={({ isActive }) => `flex items-center gap-3 p-3 rounded-lg font-semibold text-xs ${isActive ? 'bg-indigo-600 text-white' : 'hover:bg-indigo-700'}`}>📋 Registry Roster</NavLink>
-        <NavLink to="/ledger" className={({ isActive }) => `flex items-center gap-3 p-3 rounded-lg font-semibold text-xs ${isActive ? 'bg-indigo-600 text-white' : 'hover:bg-indigo-700'}`}>🧾 Financial Ledger Matrix</NavLink>
+        {canViewRegistry && (
+          <NavLink to="/registry" className={({ isActive }) => `flex items-center gap-3 p-3 rounded-lg font-semibold text-xs ${isActive ? 'bg-indigo-600 text-white' : 'hover:bg-indigo-700'}`}>📋 Registry Roster</NavLink>
+        )}
+        {canViewLedger && (
+          <NavLink to="/ledger" className={({ isActive }) => `flex items-center gap-3 p-3 rounded-lg font-semibold text-xs ${isActive ? 'bg-indigo-600 text-white' : 'hover:bg-indigo-700'}`}>🧾 Financial Ledger Matrix</NavLink>
+        )}
 
-        <div className="mt-4 px-3 py-2 text-[10px] uppercase tracking-[0.35em] text-indigo-300 font-bold">
-          Content Management
-        </div>
-        <NavLink to="/admin/executives" className={({ isActive }) => `flex items-center gap-3 p-3 rounded-lg font-semibold text-xs ${isActive ? 'bg-indigo-600 text-white' : 'hover:bg-indigo-700'}`}>👥 Executive Council</NavLink>
-        <NavLink to="/admin/content/executives-gallery" className={({ isActive }) => `flex items-center gap-3 p-3 rounded-lg font-semibold text-xs ${isActive ? 'bg-indigo-600 text-white' : 'hover:bg-indigo-700'}`}>🖼️ Executives Gallery</NavLink>
-        <NavLink to="/admin/content/patrons-gallery" className={({ isActive }) => `flex items-center gap-3 p-3 rounded-lg font-semibold text-xs ${isActive ? 'bg-indigo-600 text-white' : 'hover:bg-indigo-700'}`}>👑 Patronage Gallery</NavLink>
-        <NavLink to="/admin/content/event-chronicles" className={({ isActive }) => `flex items-center gap-3 p-3 rounded-lg font-semibold text-xs ${isActive ? 'bg-indigo-600 text-white' : 'hover:bg-indigo-700'}`}>🎫 Event Chronicles</NavLink>
-        <NavLink to="/admin/content/event-manager" className={({ isActive }) => `flex items-center gap-3 p-3 rounded-lg font-semibold text-xs ${isActive ? 'bg-indigo-600 text-white' : 'hover:bg-indigo-700'}`}>📅 Event Manager</NavLink>
-        <NavLink to="/admin/content/orphanage-visitations" className={({ isActive }) => `flex items-center gap-3 p-3 rounded-lg font-semibold text-xs ${isActive ? 'bg-indigo-600 text-white' : 'hover:bg-indigo-700'}`}>🏡 Orphanage Visitations</NavLink>
-        <NavLink to="/admin/content/awards-recognition" className={({ isActive }) => `flex items-center gap-3 p-3 rounded-lg font-semibold text-xs ${isActive ? 'bg-indigo-600 text-white' : 'hover:bg-indigo-700'}`}>🏅 Awards & Recognition</NavLink>
-        <NavLink to="/admin/content/voalc" className={({ isActive }) => `flex items-center gap-3 p-3 rounded-lg font-semibold text-xs ${isActive ? 'bg-indigo-600 text-white' : 'hover:bg-indigo-700'}`}>🥇 VOALC Gallery</NavLink>
-
-        {isAdmin && (
-          <NavLink to="/admin/control" className={({ isActive }) => `flex items-center gap-3 p-3 rounded-lg font-semibold text-xs ${isActive ? 'bg-indigo-600 text-white' : 'hover:bg-indigo-700'}`}>🛠️ System Settings</NavLink>
+        {isExecutive && (
+          <>
+            <div className="mt-4 px-3 py-2 text-[10px] uppercase tracking-[0.35em] text-indigo-300 font-bold">
+              Content Management
+            </div>
+            <NavLink to="/admin/executives" className={({ isActive }) => `flex items-center gap-3 p-3 rounded-lg font-semibold text-xs ${isActive ? 'bg-indigo-600 text-white' : 'hover:bg-indigo-700'}`}>👥 Executive Council</NavLink>
+            <NavLink to="/admin/content/executives-gallery" className={({ isActive }) => `flex items-center gap-3 p-3 rounded-lg font-semibold text-xs ${isActive ? 'bg-indigo-600 text-white' : 'hover:bg-indigo-700'}`}>🖼️ Executives Gallery</NavLink>
+            <NavLink to="/admin/content/patrons-gallery" className={({ isActive }) => `flex items-center gap-3 p-3 rounded-lg font-semibold text-xs ${isActive ? 'bg-indigo-600 text-white' : 'hover:bg-indigo-700'}`}>👑 Patronage Gallery</NavLink>
+            <NavLink to="/admin/content/event-chronicles" className={({ isActive }) => `flex items-center gap-3 p-3 rounded-lg font-semibold text-xs ${isActive ? 'bg-indigo-600 text-white' : 'hover:bg-indigo-700'}`}>🎫 Event Chronicles</NavLink>
+            <NavLink to="/admin/content/event-manager" className={({ isActive }) => `flex items-center gap-3 p-3 rounded-lg font-semibold text-xs ${isActive ? 'bg-indigo-600 text-white' : 'hover:bg-indigo-700'}`}>📅 Event Manager</NavLink>
+            <NavLink to="/admin/content/orphanage-visitations" className={({ isActive }) => `flex items-center gap-3 p-3 rounded-lg font-semibold text-xs ${isActive ? 'bg-indigo-600 text-white' : 'hover:bg-indigo-700'}`}>🏡 Orphanage Visitations</NavLink>
+            <NavLink to="/admin/content/awards-recognition" className={({ isActive }) => `flex items-center gap-3 p-3 rounded-lg font-semibold text-xs ${isActive ? 'bg-indigo-600 text-white' : 'hover:bg-indigo-700'}`}>🏅 Awards & Recognition</NavLink>
+            <NavLink to="/admin/content/voalc" className={({ isActive }) => `flex items-center gap-3 p-3 rounded-lg font-semibold text-xs ${isActive ? 'bg-indigo-600 text-white' : 'hover:bg-indigo-700'}`}>🥇 VOALC Gallery</NavLink>
+            <NavLink to="/admin/control" className={({ isActive }) => `flex items-center gap-3 p-3 rounded-lg font-semibold text-xs ${isActive ? 'bg-indigo-600 text-white' : 'hover:bg-indigo-700'}`}>🛠️ System Settings</NavLink>
+          </>
         )}
 
         {canApprove && (
@@ -117,12 +125,16 @@ export default function Dashboard() {
 
       try {
         const leadershipData = await safeFetch(`${apiBase}/api/public/leadership`);
-        if (leadershipData.success && leadershipData.data?.executives) {
-          setExecutiveCouncil(leadershipData.data.executives.map((member) => ({
+        const featuredMembers = leadershipData?.data?.featuredExecutives || leadershipData?.data?.executives || [];
+
+        if (leadershipData.success && featuredMembers.length > 0) {
+          setExecutiveCouncil(featuredMembers.slice(0, 3).map((member) => ({
             name: member.name,
             role: member.position || 'Executive Member',
-            parish: member.parish || member.profileTitle || 'Deanery Executive'
+            parish: member.profileTitle || member.parish || 'Deanery Executive'
           })));
+        } else {
+          setExecutiveCouncil([]);
         }
       } catch (err) {
         console.error('Leadership fetch error', err.message || err);

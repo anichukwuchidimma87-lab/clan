@@ -5,9 +5,9 @@ import { createGalleryItem, getGalleryItems, updateGalleryItem, deleteGalleryIte
 
 const router = express.Router();
 
-router.get('/', protect, authorize('admin', 'superadmin'), getGalleryItems);
-router.post('/', protect, authorize('admin', 'superadmin'), upload.single('file'), createGalleryItem);
-router.put('/:id', protect, authorize('admin', 'superadmin'), upload.single('file'), updateGalleryItem);
-router.delete('/:id', protect, authorize('admin', 'superadmin'), deleteGalleryItem);
+router.get('/', protect, authorize('executive', 'superadmin'), getGalleryItems);
+router.post('/', protect, authorize('executive', 'superadmin'), upload.single('file'), createGalleryItem);
+router.put('/:id', protect, authorize('executive', 'superadmin'), upload.single('file'), updateGalleryItem);
+router.delete('/:id', protect, authorize('executive', 'superadmin'), deleteGalleryItem);
 
 export default router;

@@ -14,10 +14,10 @@ const router = express.Router();
 
 router.get('/ledger', protect, getLedger);
 router.get('/ledger/summary', protect, getLedgerSummary);
-router.get('/fee-types', protect, authorize('superadmin', 'admin'), getFeeTypes);
-router.post('/fee-types', protect, authorize('superadmin', 'admin'), createFeeType);
-router.put('/fee-types/:id', protect, authorize('superadmin', 'admin'), updateFeeType);
-router.put('/fee-targets', protect, authorize('superadmin', 'admin'), upsertFeeTarget);
-router.put('/ledger/entry', protect, authorize('superadmin', 'admin'), upsertLedgerEntry);
+router.get('/fee-types', protect, authorize('superadmin', 'executive'), getFeeTypes);
+router.post('/fee-types', protect, authorize('superadmin', 'executive'), createFeeType);
+router.put('/fee-types/:id', protect, authorize('superadmin', 'executive'), updateFeeType);
+router.put('/fee-targets', protect, authorize('superadmin', 'executive'), upsertFeeTarget);
+router.put('/ledger/entry', protect, authorize('superadmin', 'executive'), upsertLedgerEntry);
 
 export default router;

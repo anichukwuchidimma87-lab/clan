@@ -1,17 +1,32 @@
 import User from '../models/User.js';
+import { normalizeUserRole } from '../utils/roleUtils.js';
 
-// Get only users waiting for approval
+const leadershipPositions = [
+  'President',
+  'Vice President',
+  'Secretary',
+  'Assistant Secretary',
+  'Treasurer',
+  'Financial Secretary',
+  'Assistant Financial Secretary',
+  'PRO',
+  'Welfare Officer',
+  'Provost',
+  'Executive Member',
+  'Patron',
+  'Patroness'
+];
+
 export const getPendingUsers = async (req, res) => {
   try {
     const pendingUsers = await User.find({ status: 'pending' }).select('-password');
     res.json(pendingUsers);
   } catch (error) {
-    console.error("Error fetching pending users:", error);
+    console.error('Error fetching pending users:', error);
     res.status(500).json({ message: 'Error fetching pending users' });
   }
 };
 
-// Get approved users for leadership and admin management screens
 export const getApprovedUsers = async (req, res) => {
   try {
     const users = await User.find({ status: 'approved' }).select('-password').sort({ name: 1 });
@@ -26,44 +41,156 @@ export const getApprovedUsers = async (req, res) => {
   }
 };
 
-// Update a user's status to 'approved'
 export const approveUser = async (req, res) => {
   try {
     const user = await User.findById(req.params.id);
-    
+
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    // Logic Check: Only proceed if the user is currently pending
     if (user.status === 'approved') {
       return res.status(400).json({ message: 'User is already approved' });
     }
-    
+
     user.status = 'approved';
     await user.save();
-    
+
     res.json({ message: 'User account approved successfully', user });
   } catch (error) {
-    console.error("Error approving user:", error);
+    console.error('Error approving user:', error);
     res.status(500).json({ message: 'Server error' });
   }
 };
 
-/**
- * Update user profile information including position and profile image
- * Used for admin to update executive/patron profiles
- */
+export const updateUserRole = async (req, res) => {
+  try {
+    const { role } = req.body;
+    const targetUser = await User.findById(req.params.id);
+
+    if (!targetUser) {
+      return res.status(404).json({ success: false, message: 'User not found.' });
+    }
+
+    const normalizedRole = normalizeUserRole(role);
+    const allowedRoles = ['superadmin', 'executive', 'president', 'member'];
+
+    if (!allowedRoles.includes(normalizedRole)) {
+      return res.status(400).json({ success: false, message: 'Invalid role selected.' });
+    }
+
+    targetUser.role = normalizedRole;
+    await targetUser.save();
+
+    res.json({
+      success: true,
+      message: 'User role updated successfully.',
+      user: {
+        _id: targetUser._id,
+        name: targetUser.name,
+        email: targetUser.email,
+        role: targetUser.role,
+        status: targetUser.status,
+        position: targetUser.position
+      }
+    });
+  } catch (error) {
+    console.error('Error updating user role:', error);
+    res.status(500).json({ success: false, message: 'Server error updating user role' });
+  }
+};
+
+export const createExecutiveMember = async (req, res) => {
+  try {
+    const {
+      name,
+      email,
+      position,
+      profileTitle,
+      phone,
+      executiveSessionStart,
+      executiveSessionEnd,
+      isCurrentExecutiveSession,
+      isFeaturedOnHomepage,
+      homepageOrder,
+      password
+    } = req.body;
+
+    if (!name || !email || !position) {
+      return res.status(400).json({ message: 'Name, email and position are required.' });
+    }
+
+    const normalizedEmail = String(email).trim().toLowerCase();
+    const existing = await User.findOne({ email: normalizedEmail });
+    if (existing) {
+      return res.status(409).json({ message: 'A member with this email already exists.' });
+    }
+
+    if (isCurrentExecutiveSession) {
+      await User.updateMany(
+        {
+          _id: { $ne: null },
+          position: { $in: leadershipPositions },
+          isCurrentExecutiveSession: true
+        },
+        { $set: { isCurrentExecutiveSession: false } }
+      );
+    }
+
+    const user = await User.create({
+      name: String(name).trim(),
+      email: normalizedEmail,
+      password: password || 'Executive@2026',
+      role: 'member',
+      status: 'approved',
+      position: String(position).trim(),
+      profileTitle: profileTitle ? String(profileTitle).trim() : '',
+      phone: phone ? String(phone).trim() : '',
+      executiveSessionStart: executiveSessionStart !== undefined && executiveSessionStart !== '' ? Number(executiveSessionStart) : null,
+      executiveSessionEnd: executiveSessionEnd !== undefined && executiveSessionEnd !== '' ? Number(executiveSessionEnd) : null,
+      isCurrentExecutiveSession: Boolean(isCurrentExecutiveSession),
+      isFeaturedOnHomepage: Boolean(isFeaturedOnHomepage),
+      homepageOrder: Number(homepageOrder) || 0,
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'Executive member created successfully.',
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        position: user.position,
+        profileTitle: user.profileTitle,
+        phone: user.phone,
+        executiveSessionStart: user.executiveSessionStart,
+        executiveSessionEnd: user.executiveSessionEnd,
+        isCurrentExecutiveSession: user.isCurrentExecutiveSession,
+        isFeaturedOnHomepage: user.isFeaturedOnHomepage,
+        homepageOrder: user.homepageOrder,
+      }
+    });
+  } catch (error) {
+    console.error('Error creating executive member:', error);
+    res.status(500).json({ success: false, message: 'Server error creating executive member' });
+  }
+};
+
 export const updateUserProfile = async (req, res) => {
   try {
     const { userId } = req.params;
-    const { name, position, profileTitle, email } = req.body;
-
-    try {
-      console.log('[userController] req.file:', req.file ? { originalname: req.file.originalname, path: req.file.path, size: req.file.size } : null);
-    } catch (e) {
-      console.error('[userController] Failed to log req.file', e && e.message);
-    }
+    const {
+      name,
+      position,
+      profileTitle,
+      email,
+      phone,
+      executiveSessionStart,
+      executiveSessionEnd,
+      isCurrentExecutiveSession,
+      isFeaturedOnHomepage,
+      homepageOrder
+    } = req.body;
 
     const profileImage = req.file?.path;
     const user = await User.findById(userId);
@@ -84,6 +211,37 @@ export const updateUserProfile = async (req, res) => {
     if (email !== undefined && email !== null && String(email).trim()) {
       user.email = String(email).trim();
     }
+    if (phone !== undefined) {
+      user.phone = phone ? String(phone).trim() : '';
+    }
+    if (executiveSessionStart !== undefined) {
+      const start = String(executiveSessionStart).trim();
+      user.executiveSessionStart = start === '' ? null : Number(start);
+    }
+    if (executiveSessionEnd !== undefined) {
+      const end = String(executiveSessionEnd).trim();
+      user.executiveSessionEnd = end === '' ? null : Number(end);
+    }
+    if (isCurrentExecutiveSession !== undefined) {
+      user.isCurrentExecutiveSession = Boolean(isCurrentExecutiveSession);
+      if (user.isCurrentExecutiveSession) {
+        await User.updateMany(
+          {
+            _id: { $ne: user._id },
+            position: { $in: leadershipPositions },
+            isCurrentExecutiveSession: true
+          },
+          { $set: { isCurrentExecutiveSession: false } }
+        );
+      }
+    }
+    if (isFeaturedOnHomepage !== undefined) {
+      user.isFeaturedOnHomepage = Boolean(isFeaturedOnHomepage);
+    }
+    if (homepageOrder !== undefined) {
+      const order = Number(homepageOrder);
+      user.homepageOrder = Number.isFinite(order) ? order : 0;
+    }
     if (profileImage) {
       user.profileImage = profileImage;
     }
@@ -99,7 +257,13 @@ export const updateUserProfile = async (req, res) => {
       position: user.position,
       profileImage: user.profileImage,
       profileTitle: user.profileTitle,
+      phone: user.phone,
       yearCommissioned: user.yearCommissioned,
+      executiveSessionStart: user.executiveSessionStart,
+      executiveSessionEnd: user.executiveSessionEnd,
+      isCurrentExecutiveSession: user.isCurrentExecutiveSession,
+      isFeaturedOnHomepage: user.isFeaturedOnHomepage,
+      homepageOrder: user.homepageOrder,
     };
 
     res.json({

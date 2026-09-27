@@ -28,7 +28,8 @@ export default function FinancialLedger() {
     }
   };
 
-  const isExecutiveOrHigher = userRole === 'admin' || userRole === 'superadmin';
+  const normalizedRole = userRole === 'admin' ? 'executive' : (userRole || 'member');
+  const isExecutiveOrHigher = normalizedRole === 'executive' || normalizedRole === 'superadmin';
 
   const yearOptions = useMemo(() => {
     const base = new Date().getFullYear();

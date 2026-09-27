@@ -8,10 +8,10 @@ const router = express.Router();
 // Public
 router.get('/public/settings', getPublicSettings);
 
-// Admin: upload file (multipart)
-router.patch('/v1/settings/logo', protect, authorize('admin'), upload.single('logo'), uploadLogo);
+// Executive: upload file (multipart)
+router.patch('/v1/settings/logo', protect, authorize('executive', 'superadmin'), upload.single('logo'), uploadLogo);
 
-// Admin: set external URL
-router.patch('/v1/settings/logo-url', protect, authorize('admin'), setLogoUrl);
+// Executive: set external URL
+router.patch('/v1/settings/logo-url', protect, authorize('executive', 'superadmin'), setLogoUrl);
 
 export default router;
