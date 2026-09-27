@@ -60,6 +60,7 @@ const RestrictedSidebar = ({ isVisible, user, navigate }) => {
 export default function Dashboard() {
   const [user, setUser] = useState({ name: '', role: '', position: '', parish: '', isLoggedIn: false });
   const [registryCount, setRegistryCount] = useState(0);
+  const [logoUrl, setLogoUrl] = useState('');
   const navigate = useNavigate();
 
   const executives = [
@@ -102,6 +103,14 @@ export default function Dashboard() {
       } catch (err) { console.error(err); }
     };
     checkStatus();
+    // fetch public settings (logo)
+    (async () => {
+      try {
+        const res = await fetch('https://clan-3slh.onrender.com/api/public/settings');
+        const data = await res.json();
+        if (data.success && data.data) setLogoUrl(data.data.logoUrl || '');
+      } catch (e) { console.error('Failed to fetch site settings', e); }
+    })();
   }, []);
 
   return (
@@ -143,7 +152,13 @@ export default function Dashboard() {
 
         <div className="p-6 md:p-8 space-y-8 max-w-7xl mx-auto">
           <section className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 flex flex-col md:flex-row items-center gap-6">
-            <div className="w-40 h-40 bg-indigo-50 rounded-full flex items-center justify-center border-4 border-indigo-100/50 overflow-hidden shrink-0 text-5xl shadow-inner">⛪</div>
+            <div className="w-40 h-40 bg-indigo-50 rounded-full flex items-center justify-center border-4 border-indigo-100/50 overflow-hidden shrink-0 text-5xl shadow-inner">
+              {logoUrl ? (
+                <img src={logoUrl} alt="CLAN logo" className="w-full h-full object-cover" />
+              ) : (
+                '⛪'
+              )}
+            </div>
             <div className="flex-grow space-y-2 text-center md:text-left">
               <h2 className="text-2xl font-extrabold text-gray-900 tracking-tight leading-snug">
                 Welcome to CLAN <span className="text-indigo-600 font-black">Benin City Deanery Hub Portal</span>

@@ -9,6 +9,7 @@ import publicRoutes from './routes/publicRoutes.js';
 import galleryRoutes from './routes/galleryRoutes.js';
 import userRoutes from './routes/userRoutes.js';
 import eventRoutes from './routes/eventRoutes.js';
+import settingsRoutes from './routes/settingsRoutes.js';
 import { protect } from './middleware/authMiddleware.js';
 import { getLedgerSummary } from './controllers/financeController.js';
 
@@ -41,6 +42,8 @@ app.use('/api/v1/users', userRoutes);
 app.use('/api/public', publicRoutes);
 app.use('/api/gallery', galleryRoutes);
 app.use('/api/events', eventRoutes);
+// Site settings (public + admin)
+app.use('/api', settingsRoutes);
 
 // 2. Mounted your lector routes so the URLs match your frontend perfectly!
 app.use('/api/lectors', lectorRoutes);
