@@ -84,6 +84,17 @@ function Header() {
     setMobileOpen(false);
   };
 
+  const handleLogout = () => {
+    localStorage.removeItem('clan_token');
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('token');
+    localStorage.removeItem('role');
+    localStorage.removeItem('isLoggedIn');
+    setMobileOpen(false);
+    setGalleryDropdownOpen(false);
+    navigate('/login');
+  };
+
   return (
     <nav className="sticky top-0 z-50 border-b border-slate-200 bg-white/95 backdrop-blur-md shadow-sm">
       <div className="max-w-7xl mx-auto flex h-20 items-center justify-between px-4 sm:px-6 lg:px-8">
@@ -111,6 +122,16 @@ function Header() {
           >
             Home
           </button>
+
+          {isAuthenticated && (
+            <button
+              type="button"
+              onClick={() => goTo('/dashboard')}
+              className="text-sm font-semibold text-slate-700 hover:text-slate-900 transition"
+            >
+              Dashboard
+            </button>
+          )}
 
           <div className="relative" ref={menuRef}>
             <button
@@ -183,6 +204,15 @@ function Header() {
               </button>
             </>
           )}
+          {isAuthenticated && (
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="hidden rounded-full border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-100 transition md:inline"
+            >
+              Logout
+            </button>
+          )}
           <button
             type="button"
             className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 md:hidden"
@@ -204,6 +234,15 @@ function Header() {
             >
               Home
             </button>
+            {isAuthenticated && (
+              <button
+                type="button"
+                onClick={() => goTo('/dashboard')}
+                className="w-full rounded-2xl px-4 py-3 text-left text-sm font-semibold text-slate-700 hover:bg-slate-100 transition"
+              >
+                Dashboard
+              </button>
+            )}
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-2">
               <button
                 type="button"
@@ -266,6 +305,15 @@ function Header() {
                   Register
                 </button>
               </>
+            )}
+            {isAuthenticated && (
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="w-full rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-left text-sm font-semibold text-red-700 hover:bg-red-100 transition"
+              >
+                Logout
+              </button>
             )}
           </div>
         </div>
