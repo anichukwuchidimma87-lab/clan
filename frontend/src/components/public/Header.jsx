@@ -17,7 +17,21 @@ function Header() {
   const menuRef = useRef(null);
   const [logoUrl, setLogoUrl] = useState('');
 
-  const isAuthenticated = Boolean(localStorage.getItem('authToken') || localStorage.getItem('token'));
+  const getStoredAuthToken = () => {
+    const token = localStorage.getItem('clan_token');
+    if (token) return token;
+
+    const legacyToken = localStorage.getItem('authToken') || localStorage.getItem('token');
+    if (legacyToken) {
+      localStorage.setItem('clan_token', legacyToken);
+      localStorage.removeItem('authToken');
+      localStorage.removeItem('token');
+    }
+
+    return legacyToken || '';
+  };
+
+  const isAuthenticated = Boolean(getStoredAuthToken());
 
   useEffect(() => {
     const handleClickOutside = (event) => {

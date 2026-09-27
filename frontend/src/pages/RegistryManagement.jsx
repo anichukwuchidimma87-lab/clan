@@ -796,6 +796,32 @@ export default function RegistryManagement() {
     ? filteredMembers.slice((currentPage - 1) * pageSize, currentPage * pageSize)
     : filteredParishes.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
+  const pageNumbers = useMemo(() => {
+    if (pages <= 7) {
+      return Array.from({ length: pages }, (_, index) => index + 1);
+    }
+
+    const windowSize = 5;
+    const start = Math.max(1, currentPage - Math.floor(windowSize / 2));
+    const end = Math.min(pages, start + windowSize - 1);
+    const adjustedStart = Math.max(1, end - windowSize + 1);
+
+    const result = [];
+    if (adjustedStart > 1) {
+      result.push(1, '...');
+    }
+
+    for (let pageNum = adjustedStart; pageNum <= end; pageNum += 1) {
+      result.push(pageNum);
+    }
+
+    if (end < pages) {
+      result.push('...', pages);
+    }
+
+    return result;
+  }, [currentPage, pages]);
+
   useEffect(() => {
     setCurrentPage(1);
   }, [activeTab, searchQuery, parishFilter, roleFilter, statusFilter, sortBy]);
@@ -1128,11 +1154,21 @@ export default function RegistryManagement() {
                   <p className="text-[11px] text-slate-500">Showing {displayRows.length} of {totalMembersCount ?? filteredMembers.length} records</p>
                   <div className="flex items-center gap-2">
                     <button onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} disabled={currentPage === 1} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-600 disabled:opacity-40">Prev</button>
-                    {[...Array(pages)].map((_, index) => (
-                      <button key={index} onClick={() => setCurrentPage(index + 1)} className={`rounded-xl px-3 py-2 text-[11px] font-semibold ${currentPage === index + 1 ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'}`}>
-                        {index + 1}
-                      </button>
-                    ))}
+                    {pageNumbers.map((pageNum, index) => {
+                      if (pageNum === '...') {
+                        return <span key={`ellipsis-${index}`} className="px-2 text-[11px] font-semibold text-slate-400">...</span>;
+                      }
+
+                      return (
+                        <button
+                          key={pageNum}
+                          onClick={() => setCurrentPage(pageNum)}
+                          className={`rounded-xl px-3 py-2 text-[11px] font-semibold ${currentPage === pageNum ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'}`}
+                        >
+                          {pageNum}
+                        </button>
+                      );
+                    })}
                     <button onClick={() => setCurrentPage(prev => Math.min(pages, prev + 1))} disabled={currentPage === pages} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-600 disabled:opacity-40">Next</button>
                   </div>
                 </div>
@@ -1203,11 +1239,21 @@ export default function RegistryManagement() {
                   <p className="text-[11px] text-slate-500">Showing {displayRows.length} of {filteredParishes.length} records</p>
                   <div className="flex items-center gap-2">
                     <button onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} disabled={currentPage === 1} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-600 disabled:opacity-40">Prev</button>
-                    {[...Array(pages)].map((_, index) => (
-                      <button key={index} onClick={() => setCurrentPage(index + 1)} className={`rounded-xl px-3 py-2 text-[11px] font-semibold ${currentPage === index + 1 ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'}`}>
-                        {index + 1}
-                      </button>
-                    ))}
+                    {pageNumbers.map((pageNum, index) => {
+                      if (pageNum === '...') {
+                        return <span key={`ellipsis-${index}`} className="px-2 text-[11px] font-semibold text-slate-400">...</span>;
+                      }
+
+                      return (
+                        <button
+                          key={pageNum}
+                          onClick={() => setCurrentPage(pageNum)}
+                          className={`rounded-xl px-3 py-2 text-[11px] font-semibold ${currentPage === pageNum ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'}`}
+                        >
+                          {pageNum}
+                        </button>
+                      );
+                    })}
                     <button onClick={() => setCurrentPage(prev => Math.min(pages, prev + 1))} disabled={currentPage === pages} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-600 disabled:opacity-40">Next</button>
                   </div>
                 </div>
