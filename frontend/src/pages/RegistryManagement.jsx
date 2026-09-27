@@ -44,6 +44,7 @@ export default function RegistryManagement() {
   const parseJwt = (value) => {
     try { return JSON.parse(atob(value.split('.')[1])); } catch { return null; }
   };
+  const payload = token ? parseJwt(token) : null;
   const userRole = payload?.role === 'admin' ? 'executive' : (payload?.role || 'member');
   const canEditRegistry = ['superadmin', 'executive'].includes(userRole);
 
@@ -79,8 +80,6 @@ export default function RegistryManagement() {
       setAlertMessage({ type: 'error', text: 'Network error while updating parish.' });
     }
   };
-  const payload = token ? parseJwt(token) : null;
-
   const headers = {
     Authorization: `Bearer ${token}`,
     'Content-Type': 'application/json'
