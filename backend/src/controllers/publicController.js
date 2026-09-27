@@ -5,11 +5,27 @@ import GalleryItem from '../models/GalleryItem.js';
  * Get all executives and leadership team members
  * Public endpoint - no authentication required
  */
+const leadershipPositions = [
+  'President',
+  'Vice President',
+  'Secretary',
+  'Assistant Secretary',
+  'Treasurer',
+  'Financial Secretary',
+  'Assistant Financial Secretary',
+  'PRO',
+  'Welfare Officer',
+  'Provost',
+  'Executive Member',
+  'Patron',
+  'Patroness'
+];
+
 export const getExecutives = async (req, res) => {
   try {
     const executives = await User.find({
       position: {
-        $in: ['President', 'Vice President', 'Secretary', 'Treasurer', 'Executive Member']
+        $in: leadershipPositions.filter(position => !['Patron', 'Patroness'].includes(position))
       }
     }).select('name position profileImage email');
 
@@ -59,16 +75,15 @@ export const getLeadershipProfiles = async (req, res) => {
   try {
     const leadership = await User.find({
       position: {
-        $in: ['President', 'Vice President', 'Secretary', 'Treasurer', 'Executive Member', 'Patron', 'Patroness']
+        $in: leadershipPositions
       }
-    }).select('name position profileImage email').sort({ position: 1, name: 1 });
+    }).select('name position profileImage email profileTitle').sort({ position: 1, name: 1 });
 
-    // Organize by category
     const organized = {
-      executives: leadership.filter(l => 
-        ['President', 'Vice President', 'Secretary', 'Treasurer', 'Executive Member'].includes(l.position)
+      executives: leadership.filter(l =>
+        !['Patron', 'Patroness'].includes(l.position)
       ),
-      patrons: leadership.filter(l => 
+      patrons: leadership.filter(l =>
         ['Patron', 'Patroness'].includes(l.position)
       ),
     };

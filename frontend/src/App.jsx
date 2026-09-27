@@ -13,6 +13,7 @@ import RegistryManagement from './pages/RegistryManagement';
 import Users from './pages/Users';
 import AdminControl from './pages/AdminControl';
 import AdminContent from './pages/AdminContent';
+import ExecutiveManagement from './pages/ExecutiveManagement';
 import Settings from './pages/Settings';
 import EventCalendar from './pages/EventCalendar';
 
@@ -41,6 +42,7 @@ function App() {
         <Route path="/checkin" element={<CheckIn />} />   {/* PUBLIC LINK: Send this to all parishes */}
         <Route path="/registry" element={<RegistryManagement />} /> {/* SECURE DASHBOARD: Behind the login wall */}
         <Route path="/users" element={<Users />} /> {/* USER ACCESS MANAGEMENT: For approving new users */}
+        <Route path="/admin/executives" element={<ExecutiveManagement />} />
         <Route path="/admin/control" element={<AdminControl />} />
         <Route path="/admin/content/:section" element={<AdminContent />} />
         <Route path="/events" element={<EventCalendar />} />

@@ -27,6 +27,7 @@ const RestrictedSidebar = ({ isVisible, user, navigate }) => {
         <div className="mt-4 px-3 py-2 text-[10px] uppercase tracking-[0.35em] text-indigo-300 font-bold">
           Content Management
         </div>
+        <NavLink to="/admin/executives" className={({ isActive }) => `flex items-center gap-3 p-3 rounded-lg font-semibold text-xs ${isActive ? 'bg-indigo-600 text-white' : 'hover:bg-indigo-700'}`}>👥 Executive Council</NavLink>
         <NavLink to="/admin/content/executives-gallery" className={({ isActive }) => `flex items-center gap-3 p-3 rounded-lg font-semibold text-xs ${isActive ? 'bg-indigo-600 text-white' : 'hover:bg-indigo-700'}`}>🖼️ Executives Gallery</NavLink>
         <NavLink to="/admin/content/patrons-gallery" className={({ isActive }) => `flex items-center gap-3 p-3 rounded-lg font-semibold text-xs ${isActive ? 'bg-indigo-600 text-white' : 'hover:bg-indigo-700'}`}>👑 Patronage Gallery</NavLink>
         <NavLink to="/admin/content/event-chronicles" className={({ isActive }) => `flex items-center gap-3 p-3 rounded-lg font-semibold text-xs ${isActive ? 'bg-indigo-600 text-white' : 'hover:bg-indigo-700'}`}>🎫 Event Chronicles</NavLink>
@@ -60,6 +61,7 @@ const RestrictedSidebar = ({ isVisible, user, navigate }) => {
 export default function Dashboard() {
   const [user, setUser] = useState({ name: '', role: '', position: '', parish: '', isLoggedIn: false });
   const [registryCount, setRegistryCount] = useState(0);
+  const [executiveCouncil, setExecutiveCouncil] = useState([]);
   const [logoUrl, setLogoUrl] = useState('');
   const navigate = useNavigate();
   const apiBase = import.meta.env.VITE_API_URL || 'https://clan-3slh.onrender.com';
@@ -75,17 +77,17 @@ export default function Dashboard() {
     try { return JSON.parse(text); } catch { return { success: true, data: text }; }
   };
 
-  const executives = [
-    { name: "Mr. Abatsu Michael", role: "President", parish: "Holy Trinity" },
-    { name: "Mrs. Ella Idahosa", role: "Vice President", parish: "St. Mary Obe" },
-    { name: "Mr. Osagie Ukhurebor", role: "Secretary", parish: "St. Joseph" },
-    { name: "Miss Anichikwu Chidimma", role: "Assistant Secretary", parish: "Assumption Uteh" },
-    { name: "Mr. Desmond Osaji", role: "Treasurer", parish: "St. Mathias Ologbo" },
-    { name: "Mrs. Augustina Okpara", role: "Financial Secretary", parish: "St. Paul" },
-    { name: "Mrs. Vivian Ugorji", role: "Assistant Financial Secretary", parish: "Blessed Tansi" },
-    { name: "Mr. CSP Isibor", role: "PRO", parish: "St. Augustine" },
-    { name: "Miss Nkeiruka Ifeachor", role: "Welfare Officer", parish: "Holy Cross" },
-    { name: "Mr. Onwe Paul", role: "Provost", parish: "Blessed Tansi" }
+  const fallbackExecutives = [
+    { name: 'Mr. Abatsu Michael', role: 'President', parish: 'Holy Trinity' },
+    { name: 'Mrs. Ella Idahosa', role: 'Vice President', parish: 'St. Mary Obe' },
+    { name: 'Mr. Osagie Ukhurebor', role: 'Secretary', parish: 'St. Joseph' },
+    { name: 'Miss Anichikwu Chidimma', role: 'Assistant Secretary', parish: 'Assumption Uteh' },
+    { name: 'Mr. Desmond Osaji', role: 'Treasurer', parish: 'St. Mathias Ologbo' },
+    { name: 'Mrs. Augustina Okpara', role: 'Financial Secretary', parish: 'St. Paul' },
+    { name: 'Mrs. Vivian Ugorji', role: 'Assistant Financial Secretary', parish: 'Blessed Tansi' },
+    { name: 'Mr. CSP Isibor', role: 'PRO', parish: 'St. Augustine' },
+    { name: 'Miss Nkeiruka Ifeachor', role: 'Welfare Officer', parish: 'Holy Cross' },
+    { name: 'Mr. Onwe Paul', role: 'Provost', parish: 'Blessed Tansi' }
   ];
 
   const parseJwt = (token) => {
@@ -112,6 +114,20 @@ export default function Dashboard() {
         const countData = await safeFetch(`${apiBase}/api/public/stats`);
         if (countData.success) setRegistryCount(countData.data.totalLectors);
       } catch (err) { console.error('Stats error', err.message || err); }
+
+      try {
+        const leadershipData = await safeFetch(`${apiBase}/api/public/leadership`);
+        if (leadershipData.success && leadershipData.data?.executives) {
+          setExecutiveCouncil(leadershipData.data.executives.map((member) => ({
+            name: member.name,
+            role: member.position || 'Executive Member',
+            parish: member.parish || member.profileTitle || 'Deanery Executive'
+          })));
+        }
+      } catch (err) {
+        console.error('Leadership fetch error', err.message || err);
+        setExecutiveCouncil([]);
+      }
     };
     checkStatus();
     // fetch public settings (logo)
@@ -203,8 +219,8 @@ export default function Dashboard() {
               <h2 className="text-lg font-black text-gray-900 tracking-tight flex items-center gap-2"><span>👥</span> Benin City Deanery Lectors Executive Council</h2>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {executives.map((exec, index) => (
-                <div key={index} className="bg-gray-50/70 border border-gray-100 p-4 rounded-xl flex items-center gap-4">
+              {(executiveCouncil.length > 0 ? executiveCouncil : fallbackExecutives).map((exec, index) => (
+                <div key={`${exec.name}-${index}`} className="bg-gray-50/70 border border-gray-100 p-4 rounded-xl flex items-center gap-4">
                   <div className="w-12 h-12 rounded-full bg-indigo-50 border border-indigo-100/80 flex items-center justify-center font-bold text-xs text-indigo-600 tracking-tighter shrink-0">{index + 1}</div>
                   <div className="space-y-0.5">
                     <p className="font-bold text-gray-900 text-sm leading-tight">{exec.name}</p>
