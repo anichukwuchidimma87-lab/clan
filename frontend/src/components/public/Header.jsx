@@ -17,47 +17,7 @@ function Header() {
   const menuRef = useRef(null);
   const [logoUrl, setLogoUrl] = useState('');
 
-  // user state derived from JWT stored in `clan_token`
-  const [user, setUser] = useState({ name: '', role: '', parish: '', isLoggedIn: false });
-
-  const parseJwt = (token) => {
-    try { return JSON.parse(atob(token.split('.')[1])); } catch { return null; }
-  };
-
-  const formatUserName = (payload) => {
-    const fullName = [payload?.title || '', payload?.firstName || '', payload?.lastName || '', payload?.name || '']
-      .filter(Boolean)
-      .join(' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-
-    if (fullName) return fullName;
-    return `${payload?.title || 'Mr.'} ${payload?.firstName || ''} ${payload?.lastName || ''}`.trim() || 'Member';
-  };
-
-  useEffect(() => {
-    const loadFromStorage = () => {
-      const t = localStorage.getItem('clan_token') || localStorage.getItem('authToken') || localStorage.getItem('token');
-      if (t) {
-        const p = parseJwt(t);
-        if (p) {
-          setUser({
-            name: formatUserName(p),
-            role: p.role || 'member',
-            parish: p.parish || '',
-            isLoggedIn: true
-          });
-          return;
-        }
-      }
-      setUser({ name: '', role: '', parish: '', isLoggedIn: false });
-    };
-
-    loadFromStorage();
-    const onStorage = (e) => { if (e.key && ['clan_token','authToken','token'].includes(e.key)) loadFromStorage(); };
-    window.addEventListener('storage', onStorage);
-    return () => window.removeEventListener('storage', onStorage);
-  }, []);
+  const isAuthenticated = Boolean(localStorage.getItem('authToken') || localStorage.getItem('token'));
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -188,25 +148,10 @@ function Header() {
           >
             Leadership
           </button>
-          {(user.role === 'executive' || user.role === 'superadmin' || user.role === 'admin') && (
-            <>
-              <button type="button" onClick={() => goTo('/admin/audit')} className="text-sm font-semibold text-slate-700 hover:text-slate-900 transition">Audit Logs</button>
-              <button type="button" onClick={() => goTo('/admin/deanery-targets')} className="text-sm font-semibold text-slate-700 hover:text-slate-900 transition">Deanery Targets</button>
-            </>
-          )}
-          {user.isLoggedIn && (
-            <button
-              type="button"
-              onClick={() => goTo('/dashboard')}
-              className="text-sm font-semibold text-slate-700 hover:text-slate-900 transition"
-            >
-              Dashboard
-            </button>
-          )}
         </div>
 
         <div className="flex items-center gap-3">
-          {!user.isLoggedIn && (
+          {!isAuthenticated && (
             <>
               <button
                 type="button"
@@ -224,46 +169,14 @@ function Header() {
               </button>
             </>
           )}
-          {user.isLoggedIn ? (
-            <>
-              <div className="hidden md:flex items-center gap-3">
-                <div className="text-right flex flex-col items-end">
-                  <button
-                    type="button"
-                    onClick={() => goTo('/profile')}
-                    className="font-bold text-gray-900 text-sm hover:text-indigo-700 transition"
-                  >
-                    {user.name || 'Member'}
-                  </button>
-                  <span className="text-[10px] text-indigo-600 uppercase font-bold px-2 py-0.5 rounded bg-indigo-50 border border-indigo-100">{user.role}</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => { localStorage.removeItem('clan_token'); localStorage.removeItem('role'); localStorage.removeItem('isLoggedIn'); window.location.reload(); }}
-                  className="hidden md:inline-flex items-center gap-2 rounded-full bg-red-600 hover:bg-red-700 text-white px-3 py-2 text-sm font-semibold"
-                >
-                  🔒 Sign Out
-                </button>
-              </div>
-              <button
-                type="button"
-                className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 md:hidden"
-                onClick={() => setMobileOpen((open) => !open)}
-                aria-label="Toggle menu"
-              >
-                <span className="text-xl">☰</span>
-              </button>
-            </>
-          ) : (
-            <button
-              type="button"
-              className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 md:hidden"
-              onClick={() => setMobileOpen((open) => !open)}
-              aria-label="Toggle menu"
-            >
-              <span className="text-xl">☰</span>
-            </button>
-          )}
+          <button
+            type="button"
+            className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 md:hidden"
+            onClick={() => setMobileOpen((open) => !open)}
+            aria-label="Toggle menu"
+          >
+            <span className="text-xl">☰</span>
+          </button>
         </div>
       </div>
 
@@ -322,13 +235,7 @@ function Header() {
             >
               Leadership
             </button>
-            {(user.role === 'executive' || user.role === 'superadmin' || user.role === 'admin') && (
-              <>
-                <button type="button" onClick={() => goTo('/admin/audit')} className="w-full rounded-2xl px-4 py-3 text-left text-sm font-semibold text-slate-700 hover:bg-slate-100 transition">Audit Logs</button>
-                <button type="button" onClick={() => goTo('/admin/deanery-targets')} className="w-full rounded-2xl px-4 py-3 text-left text-sm font-semibold text-slate-700 hover:bg-slate-100 transition">Deanery Targets</button>
-              </>
-            )}
-            {!user.isLoggedIn && (
+            {!isAuthenticated && (
               <>
                 <button
                   type="button"

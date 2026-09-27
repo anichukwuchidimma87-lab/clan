@@ -18,6 +18,7 @@ import AdminContent from './pages/AdminContent';
 import ExecutiveManagement from './pages/ExecutiveManagement';
 import EventCalendar from './pages/EventCalendar';
 import Profile from './pages/Profile';
+import Settings from './pages/Settings';
 
 const getStoredRole = () => {
   const token = localStorage.getItem('clan_token');
@@ -62,7 +63,7 @@ function App() {
         <Route path="/admin/content/:section" element={<RoleGate allow={['superadmin', 'executive']}><AdminContent /></RoleGate>} />
         <Route path="/events" element={<RoleGate allow={['superadmin', 'executive']}><EventCalendar /></RoleGate>} />
         <Route path="/checkin" element={<CheckIn />} />
-        <Route path="/settings" element={<Navigate to="/admin/control" replace />} />
+        <Route path="/settings" element={<Settings />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Router>

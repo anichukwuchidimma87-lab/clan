@@ -12,6 +12,19 @@ export default function AdminControl() {
           </p>
 
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="rounded-3xl border border-indigo-200 bg-indigo-50 p-5">
+              <h2 className="text-lg font-semibold text-indigo-900">Association settings</h2>
+              <p className="text-sm text-indigo-700 mt-2">
+                Update the deanery logo, site branding, and public-facing identity for the association.
+              </p>
+              <Link
+                to="/settings"
+                className="mt-4 inline-flex items-center rounded-full bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 transition"
+              >
+                Open association settings
+              </Link>
+            </div>
+
             <div className="rounded-3xl border border-slate-200 p-5 bg-slate-50">
               <h2 className="text-lg font-semibold text-slate-900">System configuration</h2>
               <p className="text-sm text-slate-600 mt-2">
@@ -26,16 +39,16 @@ export default function AdminControl() {
               </p>
             </div>
 
-            <div className="rounded-3xl border border-indigo-200 bg-indigo-50 p-5">
-              <h2 className="text-lg font-semibold text-indigo-900">Local profile settings</h2>
-              <p className="text-sm text-indigo-700 mt-2">
-                Update your personal information, contact details, and account password from your profile editor.
+            <div className="rounded-3xl border border-slate-200 p-5 bg-white">
+              <h2 className="text-lg font-semibold text-slate-900">Profile</h2>
+              <p className="text-sm text-slate-600 mt-2">
+                Update your personal information, contact details, and account password from your profile page.
               </p>
               <Link
                 to="/profile"
-                className="mt-4 inline-flex items-center rounded-full bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 transition"
+                className="mt-4 inline-flex items-center rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 transition"
               >
-                Open profile settings
+                Open profile
               </Link>
             </div>
           </div>
