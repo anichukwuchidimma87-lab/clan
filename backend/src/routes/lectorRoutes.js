@@ -3,6 +3,7 @@ import {
   publicCheckIn, 
   addLector,
   getUpcomingBirthdays,
+  getPublicBirthdays,
   getRegistryData, 
   updateLector, 
   deleteLector, 
@@ -21,6 +22,7 @@ router.post('/checkin', publicCheckIn);
 // Secure executive registry paths (Protected by your protect middleware)
 router.get('/registry', protect, getRegistryData);
 router.get('/birthdays', protect, getUpcomingBirthdays);
+router.get('/public-birthdays', getPublicBirthdays);
 router.post('/registry', protect, requirePermission('add'), addLector);
 router.post('/parishes/bulk-upload', protect, bulkUploadParishes);
 router.put('/update/:id', protect, updateLector);

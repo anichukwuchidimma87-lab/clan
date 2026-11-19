@@ -1,8 +1,18 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import generateCaption from '../utils/generateCaption';
+import { EVENT_TIME_ZONE, formatEventDateTime, toEventDateTimeInput } from '../utils/eventDateTime';
 import ConfirmDialog from '../components/ConfirmDialog';
 import StatusNotice from '../components/StatusNotice';
+
+const emptyEventForm = { title: '', description: '', date: '', location: '', coverImage: '' };
+const eventFormFromRecord = (event) => ({
+  title: event.title || '',
+  description: event.description || '',
+  date: toEventDateTimeInput(event.date),
+  location: event.location || '',
+  coverImage: event.coverImage || ''
+});
 
 function EventManager() {
   const [events, setEvents] = useState([]);
@@ -14,15 +24,25 @@ function EventManager() {
   const [pendingDelete, setPendingDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [editForm, setEditForm] = useState(emptyEventForm);
+  const [editError, setEditError] = useState('');
+  const [editSaving, setEditSaving] = useState(false);
+  const [discardRequest, setDiscardRequest] = useState(null);
+  const editButtonRefs = useRef({});
+  const editTitleRef = useRef(null);
+  const focusAfterEditRef = useRef(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [sortBy, setSortBy] = useState('soonest');
-  const [form, setForm] = useState({ title: '', description: '', date: '', location: '', coverImage: '' });
+  const [form, setForm] = useState(emptyEventForm);
   const [bulkText, setBulkText] = useState('');
   const [bulkLoading, setBulkLoading] = useState(false);
   const [bulkError, setBulkError] = useState('');
+  const [bulkErrors, setBulkErrors] = useState([]);
+  const [bulkSummary, setBulkSummary] = useState('');
   const apiRoot = import.meta.env.VITE_API_URL || '';
   const token = localStorage.getItem('clan_token');
+  const editIsDirty = Boolean(editing && JSON.stringify(editForm) !== JSON.stringify(eventFormFromRecord(editing)));
 
   const getStatusTone = (status = 'Upcoming') => {
     switch (status) {
@@ -35,14 +55,23 @@ function EventManager() {
     }
   };
 
-  const formatDate = (value) =>
-    new Date(value).toLocaleString(undefined, {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-    });
+  useEffect(() => {
+    if (editing) editTitleRef.current?.focus();
+    else if (!editSaving && focusAfterEditRef.current) {
+      editButtonRefs.current[focusAfterEditRef.current]?.focus();
+      focusAfterEditRef.current = null;
+    }
+  }, [editing, editSaving]);
+
+  useEffect(() => {
+    if (!editIsDirty) return undefined;
+    const warnBeforeLeaving = (event) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warnBeforeLeaving);
+    return () => window.removeEventListener('beforeunload', warnBeforeLeaving);
+  }, [editIsDirty]);
 
   const load = async () => {
     setLoading(true);
@@ -69,19 +98,16 @@ function EventManager() {
     setSaving(true);
     setFeedback(null);
     try {
-      const method = editing ? 'PATCH' : 'POST';
-      const url = editing ? `${apiRoot}/api/events/${editing._id}` : `${apiRoot}/api/events`;
-      const res = await fetch(url, {
-        method,
+      const res = await fetch(`${apiRoot}/api/events`, {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify(form),
       });
       const json = await res.json();
       if (!res.ok || !json.success) throw new Error(json.message || 'Unable to save the event.');
-      setForm({ title: '', description: '', date: '', location: '', coverImage: '' });
-      setEditing(null);
-      setFeedback({ type: 'success', text: editing ? 'Event changes saved.' : 'Event created.' });
-      await load();
+      setForm(emptyEventForm);
+      setEvents((prev) => [...prev, json.data]);
+      setFeedback({ type: 'success', text: 'Event created.' });
     } catch (err) {
       console.error(err);
       setFeedback({ type: 'error', text: err.message || 'Unable to save the event.' });
@@ -90,15 +116,70 @@ function EventManager() {
     }
   };
 
-  const startEdit = (ev) => {
-    setEditing(ev);
-    setForm({
-      title: ev.title,
-      description: ev.description,
-      date: new Date(ev.date).toISOString().slice(0, 16),
-      location: ev.location,
-      coverImage: ev.coverImage,
-    });
+  const openEditor = (event) => {
+    setEditing(event);
+    setEditForm(eventFormFromRecord(event));
+    setEditError('');
+  };
+
+  const requestEdit = (event) => {
+    if (editIsDirty) {
+      setDiscardRequest({ nextEvent: event });
+      return;
+    }
+    openEditor(event);
+  };
+
+  const closeEditor = () => {
+    const eventId = editing?._id;
+    setEditing(null);
+    setEditError('');
+    focusAfterEditRef.current = eventId;
+  };
+
+  const requestCloseEditor = () => {
+    if (editIsDirty) {
+      setDiscardRequest({ nextEvent: null });
+      return;
+    }
+    closeEditor();
+  };
+
+  const confirmDiscard = () => {
+    const nextEvent = discardRequest?.nextEvent;
+    setDiscardRequest(null);
+    setEditing(null);
+    if (nextEvent) {
+      window.requestAnimationFrame(() => openEditor(nextEvent));
+      return;
+    }
+    focusAfterEditRef.current = editing?._id;
+  };
+
+  const saveEdit = async (event, e) => {
+    e.preventDefault();
+    if (editSaving) return;
+    setEditSaving(true);
+    setEditError('');
+    try {
+      const eventPayload = { ...editForm };
+      if (eventPayload.date === eventFormFromRecord(event).date) delete eventPayload.date;
+      const res = await fetch(`${apiRoot}/api/events/${event._id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(eventPayload)
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.message || 'Unable to save the event.');
+      setEvents((previous) => previous.map((item) => item._id === event._id ? json.data : item));
+      setFeedback({ type: 'success', text: 'Event changes saved.' });
+      closeEditor();
+    } catch (error) {
+      console.error('Save event error', error);
+      setEditError(error.message || 'Unable to save the event.');
+    } finally {
+      setEditSaving(false);
+    }
   };
 
   const toggle = async (id) => {
@@ -148,6 +229,8 @@ function EventManager() {
     }
     setBulkLoading(true);
     setBulkError('');
+    setBulkErrors([]);
+    setBulkSummary('');
     setFeedback(null);
     try {
       const res = await fetch(`${apiRoot}/api/events/bulk-import`, {
@@ -159,12 +242,15 @@ function EventManager() {
         body: JSON.stringify({ rawData: bulkText }),
       });
       const json = await res.json();
-      if (res.ok && json.success) {
+      if (json.success) {
         setBulkText('');
-        setFeedback({ type: 'success', text: `Imported ${json.count} events successfully.` });
+        setBulkSummary(json.message || `Imported ${json.count} events.`);
+        setBulkErrors(Array.isArray(json.errors) ? json.errors : []);
+        setFeedback({ type: 'success', text: `Imported ${json.importedCount ?? json.count} events.` });
         await load();
       } else {
-        throw new Error(json.message || 'Bulk import failed.');
+        setBulkError(json.message || 'Bulk import failed. No events were imported.');
+        setBulkErrors(Array.isArray(json.errors) ? json.errors : []);
       }
     } catch (err) {
       console.error('Bulk import error', err);
@@ -172,6 +258,20 @@ function EventManager() {
     } finally {
       setBulkLoading(false);
     }
+  };
+
+  const downloadCsvTemplate = () => {
+    const content = [
+      'title,date,description,location,status,coverImage',
+      '"Sample event - replace before importing",2026-07-15T10:00,"A sample description, with a comma","St. Mary Church Hall",Upcoming,'
+    ].join('\r\n');
+    const blob = new Blob([`\uFEFF${content}\r\n`], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'clan-event-template.csv';
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
   };
 
   const copyCaption = async (ev) => {
@@ -272,21 +372,8 @@ function EventManager() {
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-[10px] font-bold uppercase tracking-[0.28em] text-slate-500">Entry form</p>
-              <h3 className="mt-2 text-2xl font-black text-slate-900">{editing ? 'Edit event' : 'Create new event'}</h3>
+              <h3 className="mt-2 text-2xl font-black text-slate-900">Create new event</h3>
             </div>
-
-            {editing && (
-              <button
-                type="button"
-                onClick={() => {
-                  setEditing(null);
-                  setForm({ title: '', description: '', date: '', location: '', coverImage: '' });
-                }}
-                className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-600"
-              >
-                Cancel
-              </button>
-            )}
           </div>
 
           <form onSubmit={save} className="mt-6 space-y-4">
@@ -296,6 +383,7 @@ function EventManager() {
                 placeholder="Annual Parish Retreat"
                 value={form.title}
                 onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))}
+                disabled={saving || editSaving}
                 className="w-full rounded-2xl border border-slate-200 bg-white p-3 text-sm text-slate-700 outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100"
                 required
               />
@@ -307,6 +395,7 @@ function EventManager() {
                 placeholder="Tell the community what this event is about..."
                 value={form.description}
                 onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
+                disabled={saving || editSaving}
                 rows={4}
                 className="w-full rounded-2xl border border-slate-200 bg-white p-3 text-sm text-slate-700 outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100"
               />
@@ -314,14 +403,16 @@ function EventManager() {
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <label className="mb-2 block text-xs font-bold uppercase tracking-[0.25em] text-slate-500">Date & time</label>
+                <label className="mb-2 block text-xs font-bold uppercase tracking-[0.25em] text-slate-500">Date & time ({EVENT_TIME_ZONE})</label>
                 <input
                   type="datetime-local"
                   value={form.date}
                   onChange={(e) => setForm((prev) => ({ ...prev, date: e.target.value }))}
+                  disabled={saving || editSaving}
                   className="w-full rounded-2xl border border-slate-200 bg-white p-3 text-sm text-slate-700 outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100"
                   required
                 />
+                <p className="mt-2 text-xs text-slate-500">Enter the local CLAN event time. It is not converted from your device timezone.</p>
               </div>
 
               <div>
@@ -330,6 +421,7 @@ function EventManager() {
                   placeholder="St. Mary’s Church Hall"
                   value={form.location}
                   onChange={(e) => setForm((prev) => ({ ...prev, location: e.target.value }))}
+                  disabled={saving || editSaving}
                   className="w-full rounded-2xl border border-slate-200 bg-white p-3 text-sm text-slate-700 outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100"
                 />
               </div>
@@ -341,6 +433,7 @@ function EventManager() {
                 placeholder="Optional image URL"
                 value={form.coverImage}
                 onChange={(e) => setForm((prev) => ({ ...prev, coverImage: e.target.value }))}
+                disabled={saving || editSaving}
                 className="w-full rounded-2xl border border-slate-200 bg-white p-3 text-sm text-slate-700 outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100"
               />
             </div>
@@ -348,10 +441,10 @@ function EventManager() {
             <div className="flex flex-wrap gap-3 pt-2">
               <button
                 type="submit"
-                disabled={saving}
+                disabled={saving || editSaving}
                 className="inline-flex min-h-11 items-center justify-center rounded-xl bg-indigo-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {saving ? 'Saving…' : editing ? 'Save changes' : 'Create event'}
+                {saving ? 'Saving…' : 'Create event'}
               </button>
             </div>
           </form>
@@ -359,23 +452,45 @@ function EventManager() {
           <div className="mt-8 rounded-[1.5rem] border border-slate-200 bg-white p-4 shadow-sm">
             <h3 className="text-lg font-black text-slate-900">Bulk event import</h3>
             <p className="mt-2 text-sm leading-6 text-slate-600">
-              Paste JSON or CSV data to import multiple events in one action.
+              CSV columns: title, date, description, location, status, coverImage. Use YYYY-MM-DDTHH:mm for dates and Upcoming or Completed for status; times are interpreted in Africa/Lagos. Valid rows are saved even when other rows fail, and each skipped row is reported.
             </p>
+
+            <button
+              type="button"
+              onClick={downloadCsvTemplate}
+              className="mt-3 inline-flex min-h-10 items-center justify-center rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-bold text-indigo-700 transition hover:bg-indigo-100"
+            >
+              Download CSV template
+            </button>
 
             <textarea
               value={bulkText}
               onChange={(e) => setBulkText(e.target.value)}
+              disabled={bulkLoading || editSaving}
               rows={8}
               className="mt-4 w-full resize-none rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700 outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100"
-              placeholder='JSON: [{"title":"Seminar","date":"2026-07-15T10:00","description":"...","venue":"St. Mary"}]\nCSV: title,date,description,venue'
+              placeholder={'JSON: [{"title":"Seminar","date":"2026-07-15T10:00","description":"...","location":"St. Mary"}]\nCSV: title,date,description,location,status,coverImage'}
             />
 
             {bulkError && <StatusNotice type="error" className="mt-3">{bulkError}</StatusNotice>}
+            {bulkSummary && <p role="status" className="mt-3 text-sm font-semibold text-slate-700">{bulkSummary}</p>}
+            {bulkErrors.length > 0 && (
+              <div className="mt-3 max-h-48 overflow-auto rounded-xl border border-rose-200 bg-rose-50 p-3" role="alert">
+                <p className="text-sm font-bold text-rose-800">Rows not imported</p>
+                <ul className="mt-2 list-inside list-disc space-y-1 text-xs text-rose-700">
+                  {bulkErrors.map((error, index) => (
+                    <li key={`${error.row}-${error.field}-${index}`}>
+                      Row {error.row}{error.field ? ` (${error.field})` : ''}: {error.message}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
 
             <button
               type="button"
               onClick={handleBulkImport}
-              disabled={bulkLoading}
+              disabled={bulkLoading || editSaving}
               className="mt-4 inline-flex items-center justify-center rounded-full bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-70"
             >
               {bulkLoading ? 'Importing…' : 'Import event batch'}
@@ -455,15 +570,25 @@ function EventManager() {
                     </div>
 
                     <div className="flex flex-wrap justify-end gap-2">
-                      <button type="button" onClick={() => startEdit(ev)} className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100">Edit</button>
-                      <button type="button" onClick={() => toggle(ev._id)} disabled={togglingId === ev._id} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60">{togglingId === ev._id ? 'Updating…' : ev.status === 'Upcoming' ? 'Mark completed' : 'Mark upcoming'}</button>
+                      <button
+                        ref={(node) => { editButtonRefs.current[ev._id] = node; }}
+                        type="button"
+                        aria-expanded={editing?._id === ev._id}
+                        aria-controls={`event-editor-${ev._id}`}
+                        onClick={() => requestEdit(ev)}
+                        disabled={editSaving}
+                        className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {editing?._id === ev._id ? 'Editing' : 'Edit'}
+                      </button>
+                      <button type="button" onClick={() => toggle(ev._id)} disabled={togglingId === ev._id || editSaving} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60">{togglingId === ev._id ? 'Updating…' : ev.status === 'Upcoming' ? 'Mark completed' : 'Mark upcoming'}</button>
                     </div>
                   </div>
 
                   <div className="mt-4 grid gap-3 sm:grid-cols-2">
                     <div className="rounded-2xl bg-white p-3">
                       <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-slate-500">Date</p>
-                      <p className="mt-2 text-sm font-semibold text-slate-800">{formatDate(ev.date)}</p>
+                      <p className="mt-2 text-sm font-semibold text-slate-800">{formatEventDateTime(ev.date)}</p>
                     </div>
 
                     <div className="rounded-2xl bg-white p-3">
@@ -479,8 +604,83 @@ function EventManager() {
                   <div className="mt-4 flex flex-wrap gap-2">
                     <button type="button" onClick={() => copyCaption(ev)} className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100">Copy caption</button>
                     <button type="button" onClick={() => genCaptionServer(ev._id)} className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100">Generate announcement</button>
-                    <button type="button" onClick={() => del(ev._id)} className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 transition hover:bg-rose-100">Delete</button>
+                    <button type="button" onClick={() => del(ev._id)} disabled={editSaving} className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60">Delete</button>
                   </div>
+
+                  {editing?._id === ev._id && (
+                    <form
+                      id={`event-editor-${ev._id}`}
+                      onSubmit={(event) => saveEdit(ev, event)}
+                      aria-labelledby={`event-editor-title-${ev._id}`}
+                      className="mt-5 space-y-4 rounded-2xl border border-indigo-200 bg-indigo-50/70 p-4 sm:p-5"
+                    >
+                      <div>
+                        <h5 id={`event-editor-title-${ev._id}`} className="text-lg font-black text-slate-900">Edit event</h5>
+                        <p className="mt-1 text-xs text-slate-600">Event date and time use {EVENT_TIME_ZONE}.</p>
+                      </div>
+                      <label className="block text-xs font-bold text-slate-600">
+                        Title
+                        <input
+                          ref={editTitleRef}
+                          value={editForm.title}
+                          onChange={(event) => setEditForm((previous) => ({ ...previous, title: event.target.value }))}
+                          disabled={editSaving}
+                          required
+                          className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal text-slate-800 outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100"
+                        />
+                      </label>
+                      <label className="block text-xs font-bold text-slate-600">
+                        Description
+                        <textarea
+                          value={editForm.description}
+                          onChange={(event) => setEditForm((previous) => ({ ...previous, description: event.target.value }))}
+                          disabled={editSaving}
+                          rows={3}
+                          className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal text-slate-800 outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100"
+                        />
+                      </label>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <label className="block text-xs font-bold text-slate-600">
+                          Date & time ({EVENT_TIME_ZONE})
+                          <input
+                            type="datetime-local"
+                            value={editForm.date}
+                            onChange={(event) => setEditForm((previous) => ({ ...previous, date: event.target.value }))}
+                            disabled={editSaving}
+                            required
+                            className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal text-slate-800 outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100"
+                          />
+                        </label>
+                        <label className="block text-xs font-bold text-slate-600">
+                          Location
+                          <input
+                            value={editForm.location}
+                            onChange={(event) => setEditForm((previous) => ({ ...previous, location: event.target.value }))}
+                            disabled={editSaving}
+                            className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal text-slate-800 outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100"
+                          />
+                        </label>
+                      </div>
+                      <label className="block text-xs font-bold text-slate-600">
+                        Cover image URL
+                        <input
+                          value={editForm.coverImage}
+                          onChange={(event) => setEditForm((previous) => ({ ...previous, coverImage: event.target.value }))}
+                          disabled={editSaving}
+                          className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal text-slate-800 outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100"
+                        />
+                      </label>
+                      {editError && <StatusNotice type="error">{editError}</StatusNotice>}
+                      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                        <button type="button" onClick={requestCloseEditor} disabled={editSaving} className="inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-700 disabled:cursor-not-allowed disabled:opacity-60">
+                          Cancel
+                        </button>
+                        <button type="submit" disabled={editSaving} className="inline-flex min-h-11 items-center justify-center rounded-xl bg-indigo-600 px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-60">
+                          {editSaving ? 'Saving…' : 'Save changes'}
+                        </button>
+                      </div>
+                    </form>
+                  )}
                 </article>
               ))}
             </div>
@@ -495,6 +695,15 @@ function EventManager() {
           processing={deleting}
           onConfirm={confirmDelete}
           onCancel={() => setPendingDelete(null)}
+        />
+      )}
+      {discardRequest && (
+        <ConfirmDialog
+          title="Discard unsaved event changes?"
+          message="Your edits have not been saved. Discard them and continue?"
+          confirmLabel="Discard changes"
+          onConfirm={confirmDiscard}
+          onCancel={() => setDiscardRequest(null)}
         />
       )}
     </div>

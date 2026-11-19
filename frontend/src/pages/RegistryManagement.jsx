@@ -25,6 +25,7 @@ export default function RegistryManagement() {
     gender: 'Male',
     ageBracket: '21–30',
     dateOfBirth: '',
+    publicBirthdayConsent: false,
     yearCommissioned: new Date().getFullYear(),
     employmentStatus: 'Employed',
     parishId: '',
@@ -322,6 +323,9 @@ export default function RegistryManagement() {
         deanery: 'Benin'
       };
       const editing = Boolean(editingMember?._id);
+      if (editing && !editingMember.dateOfBirth && !formState.dateOfBirth) {
+        delete body.dateOfBirth;
+      }
       const res = await fetch(editing
         ? `https://clan-3slh.onrender.com/api/lectors/update/${editingMember._id}`
         : 'https://clan-3slh.onrender.com/api/lectors/registry', {
@@ -338,6 +342,8 @@ export default function RegistryManagement() {
           phone: '',
           gender: 'Male',
           ageBracket: '21–30',
+          dateOfBirth: '',
+          publicBirthdayConsent: false,
           yearCommissioned: new Date().getFullYear(),
           employmentStatus: 'Employed',
           parishId: parishes.length > 0 ? parishes[0]._id : '',
@@ -443,6 +449,7 @@ export default function RegistryManagement() {
         gender: member.gender || 'Male',
         ageBracket: member.ageBracket || '21–30',
         dateOfBirth: member.dateOfBirth ? String(member.dateOfBirth).slice(0, 10) : '',
+        publicBirthdayConsent: member.publicBirthdayConsent === true,
         yearCommissioned: member.yearCommissioned || new Date().getFullYear(),
         employmentStatus: member.employmentStatus || 'Employed',
         parishId: member.parish?._id || member.parishId || parishes[0]?._id || '',
@@ -457,6 +464,7 @@ export default function RegistryManagement() {
         gender: 'Male',
         ageBracket: '21–30',
         dateOfBirth: '',
+        publicBirthdayConsent: false,
         yearCommissioned: new Date().getFullYear(),
         employmentStatus: 'Employed',
         parishId: parishes[0]?._id || '',
@@ -1931,6 +1939,7 @@ export default function RegistryManagement() {
                         <p><strong>Parish:</strong> {(selectedMember.parish && selectedMember.parish.name) || selectedMember.parishName || 'Unassigned'}</p>
                         <p><strong>Gender:</strong> {selectedMember.gender || 'N/A'}</p>
                         <p><strong>Date of Birth:</strong> {selectedMember.dateOfBirth ? new Date(selectedMember.dateOfBirth).toLocaleDateString() : 'N/A'}</p>
+                        <p><strong>Public birthday display:</strong> {selectedMember.publicBirthdayConsent === true ? 'Consent recorded' : 'Not opted in'}</p>
                         <p><strong>Year Commissioned:</strong> {selectedMember.yearCommissioned || 'N/A'}</p>
                       </div>
                       <div className="mt-4 flex justify-end">
@@ -2038,6 +2047,18 @@ export default function RegistryManagement() {
                     className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3"
                   />
                 </div>
+                <label className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 text-slate-600">
+                  <input
+                    type="checkbox"
+                    checked={formState.publicBirthdayConsent === true}
+                    onChange={event => setFormState(prev => ({ ...prev, publicBirthdayConsent: event.target.checked }))}
+                    className="mt-0.5 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <span>
+                    <span className="block font-semibold text-slate-700">Member explicitly opted in to public birthday display</span>
+                    <span className="mt-1 block text-[11px] leading-5">Only the member’s name and birthday month/day are published. Leave unchecked unless consent has been confirmed.</span>
+                  </span>
+                </label>
                 <div>
                   <label className="text-slate-500 block mb-1">Parish</label>
                   <select value={formState.parishId} onChange={e => setFormState(prev => ({ ...prev, parishId: e.target.value }))} className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3" required>

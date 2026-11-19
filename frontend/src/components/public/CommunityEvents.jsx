@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { Link } from 'react-router-dom';
+import { formatEventDateTime } from '../../utils/eventDateTime';
 
 export default function CommunityEvents() {
   const [events, setEvents] = useState([]);
@@ -33,7 +34,7 @@ export default function CommunityEvents() {
   const otherEvents = events.slice(1);
   const formatEventDate = (value) => {
     const date = new Date(value);
-    return Number.isNaN(date.getTime()) ? 'Date to be announced' : date.toLocaleString();
+    return Number.isNaN(date.getTime()) ? 'Date to be announced' : formatEventDateTime(date);
   };
   const daysUntil = (value) => {
     const date = new Date(value);

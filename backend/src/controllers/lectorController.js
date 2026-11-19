@@ -5,6 +5,11 @@ import FeeType from '../models/FeeType.js';
 import FeeTarget from '../models/FeeTarget.js';
 import LedgerEntry from '../models/LedgerEntry.js';
 import AuditLog from '../models/AuditLog.js';
+import {
+  getNextBirthdayOccurrence,
+  parseBirthDate,
+  serializePublicBirthday
+} from '../../../shared/eventTools.js';
 
 // HELPER PUBLIC ENDPOINT: Feeds the dynamic check-in page dropdown safely from master registry records
 export const getActiveParishList = async (req, res) => {
@@ -82,12 +87,23 @@ export const bulkUploadParishes = async (req, res) => {
 // PUBLIC SUBMISSION POST HANDLER
 export const publicCheckIn = async (req, res) => {
   try {
-    const { firstName, lastName, phone, gender, ageBracket, dateOfBirth, yearCommissioned, employmentStatus, deanery, parishName, parishId, roleInParish } = req.body;
+    const { firstName, lastName, phone, gender, ageBracket, dateOfBirth, publicBirthdayConsent, yearCommissioned, employmentStatus, deanery, parishName, parishId, roleInParish } = req.body;
 
     const parsedYear = Number(yearCommissioned);
+    if (publicBirthdayConsent !== undefined && typeof publicBirthdayConsent !== 'boolean') {
+      return res.status(400).json({ success: false, message: 'Public birthday consent must be true or false.' });
+    }
+    if (publicBirthdayConsent === true && !dateOfBirth) {
+      return res.status(400).json({ success: false, message: 'A date of birth is required for public birthday display.' });
+    }
+    let parsedDateOfBirth = null;
     if (dateOfBirth) {
-      const parsedDate = new Date(`${dateOfBirth}T00:00:00`);
-      if (Number.isNaN(parsedDate.getTime()) || parsedDate > new Date()) {
+      try {
+        parsedDateOfBirth = parseBirthDate(dateOfBirth);
+      } catch (error) {
+        return res.status(400).json({ success: false, message: error.message });
+      }
+      if (parsedDateOfBirth > new Date()) {
         return res.status(400).json({ success: false, message: 'Enter a valid date of birth.' });
       }
     }
@@ -131,7 +147,8 @@ export const publicCheckIn = async (req, res) => {
       phone,
       gender,
       ageBracket,
-      dateOfBirth: dateOfBirth ? new Date(`${dateOfBirth}T00:00:00`) : null,
+      dateOfBirth: parsedDateOfBirth,
+      publicBirthdayConsent: publicBirthdayConsent === true,
       yearCommissioned: yearCommissionedValue,
       employmentStatus,
       deanery: 'Benin', // Hardlock to Benin deanery profiles
@@ -149,7 +166,7 @@ export const publicCheckIn = async (req, res) => {
 export const addLector = async (req, res) => {
   try {
     const { role, parish } = req.user;
-    const { firstName, lastName, phone, gender, dateOfBirth, yearCommissioned, employmentStatus, parishId, roleInParish } = req.body;
+    const { firstName, lastName, phone, gender, dateOfBirth, publicBirthdayConsent, yearCommissioned, employmentStatus, parishId, roleInParish } = req.body;
 
     if (role === 'president' && !req.user.permissions?.add) {
       return res.status(403).json({ success: false, message: 'Add permission was not granted.' });
@@ -166,9 +183,20 @@ export const addLector = async (req, res) => {
       return res.status(403).json({ success: false, message: 'Presidents cannot add lectors outside their parish.' });
     }
 
+    if (publicBirthdayConsent !== undefined && typeof publicBirthdayConsent !== 'boolean') {
+      return res.status(400).json({ success: false, message: 'Public birthday consent must be true or false.' });
+    }
+    if (publicBirthdayConsent === true && !dateOfBirth) {
+      return res.status(400).json({ success: false, message: 'A date of birth is required for public birthday display.' });
+    }
+    let parsedDateOfBirth = null;
     if (dateOfBirth) {
-      const parsedDate = new Date(`${dateOfBirth}T00:00:00`);
-      if (Number.isNaN(parsedDate.getTime()) || parsedDate > new Date()) {
+      try {
+        parsedDateOfBirth = parseBirthDate(dateOfBirth);
+      } catch (error) {
+        return res.status(400).json({ success: false, message: error.message });
+      }
+      if (parsedDateOfBirth > new Date()) {
         return res.status(400).json({ success: false, message: 'Enter a valid date of birth.' });
       }
     }
@@ -188,7 +216,8 @@ export const addLector = async (req, res) => {
       lastName: lastName.trim(),
       phone,
       gender,
-      dateOfBirth: dateOfBirth ? new Date(`${dateOfBirth}T00:00:00`) : null,
+      dateOfBirth: parsedDateOfBirth,
+      publicBirthdayConsent: publicBirthdayConsent === true,
       yearCommissioned: !Number.isNaN(parsedYear) && parsedYear > 0 ? parsedYear : null,
       employmentStatus,
       deanery: 'Benin',
@@ -220,20 +249,15 @@ export const getUpcomingBirthdays = async (req, res) => {
       dateOfBirth: { $ne: null }
     }).select('firstName lastName parishName dateOfBirth');
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const year = today.getFullYear();
     const birthdays = lectors.map((lector) => {
-      const dob = new Date(lector.dateOfBirth);
-      let occurrence = new Date(year, dob.getMonth(), dob.getDate());
-      if (occurrence < today) occurrence = new Date(year + 1, dob.getMonth(), dob.getDate());
-      const distance = Math.ceil((occurrence - today) / 86400000);
+      const { month, day } = serializePublicBirthday(lector);
+      const occurrence = getNextBirthdayOccurrence(month, day);
       return {
         name: `${lector.firstName} ${lector.lastName}`,
         parishName: lector.parishName,
-        month: dob.getMonth() + 1,
-        day: dob.getDate(),
-        daysUntil: distance
+        month,
+        day,
+        daysUntil: occurrence.daysUntil
       };
     })
       .filter((item) => item.daysUntil <= days)
@@ -241,6 +265,25 @@ export const getUpcomingBirthdays = async (req, res) => {
 
     res.status(200).json({ success: true, data: birthdays });
   } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const getPublicBirthdays = async (req, res) => {
+  try {
+    const lectors = await Lector.find({
+      status: 'Active',
+      publicBirthdayConsent: true,
+      dateOfBirth: { $ne: null }
+    }).select('firstName lastName dateOfBirth').lean();
+
+    const birthdays = lectors
+      .map(serializePublicBirthday)
+      .sort((left, right) => left.month - right.month || left.day - right.day || left.name.localeCompare(right.name));
+
+    res.status(200).json({ success: true, count: birthdays.length, data: birthdays });
+  } catch (error) {
+    console.error('Error in getPublicBirthdays:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
@@ -459,17 +502,37 @@ export const updateLector = async (req, res) => {
       if (hasNonStatusChanges && !req.user.permissions?.update) {
         return res.status(403).json({ message: 'Update permission was not granted.' });
       }
-      if (Object.prototype.hasOwnProperty.call(updateFields, 'dateOfBirth') && updateFields.dateOfBirth) {
-        const parsedDob = new Date(`${updateFields.dateOfBirth}T00:00:00`);
-        if (Number.isNaN(parsedDob.getTime()) || parsedDob > new Date()) {
+    }
+
+    if (Object.prototype.hasOwnProperty.call(updateFields, 'dateOfBirth')) {
+      if (!updateFields.dateOfBirth) {
+        updateFields.dateOfBirth = null;
+      } else {
+        try {
+          updateFields.dateOfBirth = parseBirthDate(updateFields.dateOfBirth);
+        } catch (error) {
+          return res.status(400).json({ success: false, message: error.message });
+        }
+        if (updateFields.dateOfBirth > new Date()) {
           return res.status(400).json({ message: 'Enter a valid date of birth.' });
         }
-        updateFields.dateOfBirth = parsedDob;
       }
+    }
+    if (
+      Object.prototype.hasOwnProperty.call(updateFields, 'publicBirthdayConsent') &&
+      typeof updateFields.publicBirthdayConsent !== 'boolean'
+    ) {
+      return res.status(400).json({ success: false, message: 'Public birthday consent must be true or false.' });
     }
 
     const target = await Lector.findById(id);
     if (!target) return res.status(404).json({ message: "File missing." });
+    if (
+      updateFields.publicBirthdayConsent === true &&
+      !(Object.prototype.hasOwnProperty.call(updateFields, 'dateOfBirth') ? updateFields.dateOfBirth : target.dateOfBirth)
+    ) {
+      return res.status(400).json({ success: false, message: 'A date of birth is required for public birthday display.' });
+    }
 
     if (['member', 'president'].includes(role) && target.parishName !== parish) {
       return res.status(403).json({ message: "Unauthorized local perimeter control breach." });

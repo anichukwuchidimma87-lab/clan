@@ -7,6 +7,7 @@ export default function CheckIn() {
   const [phone, setPhone] = useState('');
   const [gender, setGender] = useState('Male');
   const [dateOfBirth, setDateOfBirth] = useState('');
+  const [publicBirthdayConsent, setPublicBirthdayConsent] = useState(false);
   const [commissionedStatus, setCommissionedStatus] = useState('Not Commissioned');
   const [yearCommissioned, setYearCommissioned] = useState('');
   const [employmentStatus, setEmploymentStatus] = useState('Employed');
@@ -90,6 +91,7 @@ export default function CheckIn() {
           phone, 
           gender, 
           dateOfBirth,
+          publicBirthdayConsent,
           yearCommissioned: commissionedStatus === 'Commissioned' ? Number(yearCommissioned) : null,
           employmentStatus, 
           deanery, 
@@ -103,6 +105,7 @@ export default function CheckIn() {
         setMessage({ text: `✓ Registration Successful! Welcome, ${title} ${firstName}. Your profile is active.`, isError: false });
         setFirstName(''); setLastName(''); setPhone('');
         setDateOfBirth('');
+        setPublicBirthdayConsent(false);
         setCommissionedStatus('Not Commissioned');
         setYearCommissioned('');
       } else {
@@ -180,6 +183,18 @@ export default function CheckIn() {
                 required
               />
             </div>
+
+            <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs leading-5 text-slate-600">
+              <input
+                type="checkbox"
+                checked={publicBirthdayConsent}
+                onChange={event => setPublicBirthdayConsent(event.target.checked)}
+                className="mt-1 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+              />
+              <span>
+                I agree to have my name and birthday month/day shown on the public CLAN event calendar. My birth year and full date of birth will not be displayed.
+              </span>
+            </label>
 
             <div>
               <label className="block mb-1 text-gray-500">Commissioned Status</label>

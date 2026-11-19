@@ -2,6 +2,15 @@ import React, { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import { Link, useNavigate } from 'react-router-dom';
 import StatusNotice from '../components/StatusNotice';
+import {
+  EVENT_TIME_ZONE,
+  formatBirthdayMonthDay,
+  formatEventDate,
+  formatEventTime,
+  getBirthdayOccurrence,
+  getEventDateKey,
+  getEventDateParts
+} from '../utils/eventDateTime';
 
 const FILTERS = ['All', 'Upcoming', 'Ongoing', 'Completed'];
 const CATEGORIES = ['All', 'Worship', 'Conference', 'Retreat', 'Meeting', 'Social'];
@@ -13,19 +22,8 @@ const SORT_OPTIONS = [
 
 const dayMs = 1000 * 60 * 60 * 24;
 
-const formatDate = (isoDate) =>
-  new Date(isoDate).toLocaleDateString(undefined, {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
-
-const formatTime = (isoDate) =>
-  new Date(isoDate).toLocaleTimeString([], {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+const formatDate = formatEventDate;
+const formatTime = formatEventTime;
 
 const getStatusTone = (status) => {
   switch (status) {
@@ -75,13 +73,12 @@ const deriveCategory = (event) => {
 const getEventStatus = (event) => {
   const eventDate = new Date(event.date);
   const now = new Date();
+  const eventParts = getEventDateParts(eventDate);
+  const todayParts = getEventDateParts(now);
 
   if (event.status === 'Completed') return 'Completed';
 
-  const sameDay =
-    eventDate.getFullYear() === now.getFullYear() &&
-    eventDate.getMonth() === now.getMonth() &&
-    eventDate.getDate() === now.getDate();
+  const sameDay = eventParts.year === todayParts.year && eventParts.month === todayParts.month && eventParts.day === todayParts.day;
 
   if (sameDay) return 'Ongoing';
   return eventDate > now ? 'Upcoming' : 'Completed';
@@ -91,17 +88,16 @@ const buildGoogleCalendarUrl = (event) => {
   const startDate = new Date(event.date);
   const endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
 
-  const formatGoogleDate = (date) =>
-    date
-      .toISOString()
-      .replace(/[-:]/g, '')
-      .replace(/\.\d{3}Z$/, 'Z');
+  const formatGoogleDate = (date) => {
+    const parts = getEventDateParts(date);
+    return `${parts.year}${`${parts.month}`.padStart(2, '0')}${`${parts.day}`.padStart(2, '0')}T${`${parts.hour}`.padStart(2, '0')}${`${parts.minute}`.padStart(2, '0')}${`${parts.second}`.padStart(2, '0')}`;
+  };
 
   const title = encodeURIComponent(event.title || 'Community Event');
   const details = encodeURIComponent(event.description || 'Community event');
   const location = encodeURIComponent(event.location || 'To be announced');
 
-  return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&details=${details}&location=${location}&dates=${formatGoogleDate(startDate)}/${formatGoogleDate(endDate)}`;
+  return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&details=${details}&location=${location}&dates=${formatGoogleDate(startDate)}/${formatGoogleDate(endDate)}&ctz=${encodeURIComponent(EVENT_TIME_ZONE)}`;
 };
 
 const toDateKey = (date) => {
@@ -114,6 +110,8 @@ const toDateKey = (date) => {
 
 export default function EventCalendar() {
   const [events, setEvents] = useState([]);
+  const [publicBirthdays, setPublicBirthdays] = useState([]);
+  const [birthdayError, setBirthdayError] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
@@ -121,7 +119,10 @@ export default function EventCalendar() {
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [sortBy, setSortBy] = useState('soonest');
   const [viewMode, setViewMode] = useState('grid');
-  const [currentMonth, setCurrentMonth] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+  const [currentMonth, setCurrentMonth] = useState(() => {
+    const today = getEventDateParts(new Date());
+    return new Date(today.year, today.month - 1, 1);
+  });
   const [selectedDate, setSelectedDate] = useState(null);
   const [shareFeedback, setShareFeedback] = useState(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -167,6 +168,28 @@ export default function EventCalendar() {
     return () => { active = false; };
   }, [apiRoot, reloadKey]);
 
+  useEffect(() => {
+    let active = true;
+    axios.get(`${apiRoot}/api/lectors/public-birthdays`)
+      .then((response) => {
+        if (!response.data?.success || !Array.isArray(response.data.data)) {
+          throw new Error('Public birthday response was not successful.');
+        }
+        if (active) {
+          setPublicBirthdays(response.data.data);
+          setBirthdayError('');
+        }
+      })
+      .catch((error) => {
+        console.error('Public birthday fetch error', error);
+        if (active) {
+          setPublicBirthdays([]);
+          setBirthdayError('Public birthday entries are temporarily unavailable.');
+        }
+      });
+    return () => { active = false; };
+  }, [apiRoot]);
+
   const featuredEvent = useMemo(() => {
     if (!events.length) return null;
 
@@ -209,8 +232,9 @@ export default function EventCalendar() {
       ongoing: events.filter((item) => item.normalizedStatus === 'Ongoing').length,
       completed: events.filter((item) => item.normalizedStatus === 'Completed').length,
       thisMonth: events.filter((item) => {
-        const eventDate = new Date(item.date);
-        return eventDate.getFullYear() === now.getFullYear() && eventDate.getMonth() === now.getMonth();
+        const eventDate = getEventDateParts(item.date);
+        const currentDate = getEventDateParts(now);
+        return eventDate.year === currentDate.year && eventDate.month === currentDate.month;
       }).length,
     };
   }, [events]);
@@ -219,7 +243,7 @@ export default function EventCalendar() {
     const map = new Map();
 
     events.forEach((event) => {
-      const key = toDateKey(new Date(event.date));
+      const key = getEventDateKey(event.date);
       const list = map.get(key) || [];
       list.push(event);
       map.set(key, list);
@@ -227,6 +251,22 @@ export default function EventCalendar() {
 
     return map;
   }, [events]);
+
+  const birthdayMap = useMemo(() => {
+    const map = new Map();
+    publicBirthdays.forEach((birthday) => {
+      try {
+        const occurrence = getBirthdayOccurrence(currentMonth.getFullYear(), birthday.month, birthday.day);
+        const key = `${occurrence.year}-${`${occurrence.month}`.padStart(2, '0')}-${`${occurrence.day}`.padStart(2, '0')}`;
+        const entries = map.get(key) || [];
+        entries.push(birthday);
+        map.set(key, entries);
+      } catch (error) {
+        console.error('Invalid public birthday entry:', error);
+      }
+    });
+    return map;
+  }, [currentMonth, publicBirthdays]);
 
   const calendarDays = useMemo(() => {
     const firstDay = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
@@ -242,7 +282,7 @@ export default function EventCalendar() {
 
   const visibleEvents = useMemo(() => {
     if (!selectedDate) return filteredEvents;
-    return filteredEvents.filter((event) => toDateKey(new Date(event.date)) === selectedDate);
+    return filteredEvents.filter((event) => getEventDateKey(event.date) === selectedDate);
   }, [filteredEvents, selectedDate]);
 
   const handleShare = async (event) => {
@@ -633,6 +673,7 @@ export default function EventCalendar() {
               {calendarDays.map((day) => {
                 const key = toDateKey(day);
                 const hasEvents = (eventMap.get(key) || []).length > 0;
+                const hasBirthdays = (birthdayMap.get(key) || []).length > 0;
                 const isCurrentMonth = day.getMonth() === currentMonth.getMonth();
                 const isSelected = selectedDate === key;
 
@@ -641,7 +682,7 @@ export default function EventCalendar() {
                     key={key}
                     type="button"
                     onClick={() => setSelectedDate(isSelected ? null : key)}
-                    aria-label={`${day.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}${hasEvents ? `, ${(eventMap.get(key) || []).length} events` : ''}`}
+                    aria-label={`${day.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}${hasEvents ? `, ${(eventMap.get(key) || []).length} events` : ''}${hasBirthdays ? `, ${(birthdayMap.get(key) || []).length} birthdays` : ''}`}
                     aria-pressed={isSelected}
                     className={`relative flex min-h-[92px] flex-col rounded-2xl border p-2 text-left transition ${
                       isCurrentMonth ? 'border-slate-200 bg-slate-50 text-slate-800' : 'border-slate-100 bg-slate-50/70 text-slate-400'
@@ -649,7 +690,7 @@ export default function EventCalendar() {
                   >
                     <span className="text-sm font-bold">{day.getDate()}</span>
 
-                    {hasEvents && (
+                    {(hasEvents || hasBirthdays) && (
                       <div className="mt-auto flex flex-wrap gap-1">
                         {(eventMap.get(key) || []).slice(0, 3).map((event, index) => (
                           <span
@@ -663,6 +704,7 @@ export default function EventCalendar() {
                             }`}
                           />
                         ))}
+                        {hasBirthdays && <span className="h-2.5 w-2.5 rounded-full bg-pink-500" aria-label="Birthday" />}
                       </div>
                     )}
                   </button>
@@ -719,12 +761,23 @@ export default function EventCalendar() {
                 </div>
               ))}
 
+              {(selectedDate ? birthdayMap.get(selectedDate) || [] : []).map((birthday) => (
+                <article key={`${birthday.month}-${birthday.day}-${birthday.name}`} className="rounded-2xl border border-pink-200 bg-pink-50 p-3">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-pink-700">Community birthday</p>
+                  <p className="mt-2 text-sm font-bold text-slate-900">{birthday.name}</p>
+                  <p className="mt-1 text-xs text-slate-600">{formatBirthdayMonthDay(birthday.month, birthday.day)} · Birthday</p>
+                </article>
+              ))}
+
+              {birthdayError && <p role="status" className="text-xs text-amber-700">{birthdayError}</p>}
+
               {!selectedDate && !loading && !error && events.length === 0 && (
                 <p className="text-sm text-slate-500">There are no upcoming events right now.</p>
               )}
-              {selectedDate && !loading && !error && !(eventMap.get(selectedDate) || []).length && (
+              {selectedDate && !loading && !error && !(eventMap.get(selectedDate) || []).length && !(birthdayMap.get(selectedDate) || []).length && (
                 <p className="text-sm text-slate-500">No events are scheduled for this date.</p>
               )}
+              {publicBirthdays.length > 0 && <p className="text-[11px] leading-5 text-slate-500">Birthday dates repeat yearly. February 29 birthdays are observed on March 1 in non-leap years.</p>}
             </div>
           </div>
         </div>
