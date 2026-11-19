@@ -35,6 +35,7 @@ export default function FinancialLedger() {
 
   const normalizedRole = userRole === 'admin' ? 'executive' : (userRole || 'member');
   const isExecutiveOrHigher = normalizedRole === 'executive' || normalizedRole === 'superadmin';
+  const isPresident = normalizedRole === 'president';
   const hasPendingWrites = Object.keys(pendingActions).length > 0;
 
   useEffect(() => {
@@ -111,6 +112,9 @@ export default function FinancialLedger() {
   const entryMap = useMemo(() => {
     return new Map(entries.map((entry) => [`${entry.parish}-${entry.feeType}`, entry]));
   }, [entries]);
+  const ownParishCompliant = feeTypes.length > 0 && feeTypes.every((feeType) =>
+    Number(entryMap.get(`${parishes[0]?._id}-${feeType._id}`)?.amountPaid || 0) >= Number(feeType.targetAmount || 0)
+  );
 
   const recentChanges = useMemo(() => entries
     .filter((entry) => entry.updatedAt || entry.createdAt)
@@ -118,7 +122,7 @@ export default function FinancialLedger() {
     .slice(0, 6)
     .map((entry) => ({
       ...entry,
-      parishName: parishes.find((parish) => parish._id === String(entry.parish))?.name || 'Unknown parish',
+      parishName: parishes.find((parish) => String(parish._id) === String(entry.parish))?.name || 'Unknown parish',
       feeName: feeTypes.find((feeType) => feeType._id === String(entry.feeType))?.name || 'Unknown fee'
     })), [entries, feeTypes, parishes]);
 
@@ -319,9 +323,11 @@ export default function FinancialLedger() {
 
       <div className="bg-white p-4 rounded-xl shadow-sm flex flex-col md:flex-row justify-between gap-4 border border-gray-100">
         <div>
-          <h1 className="text-xl font-black text-gray-900 tracking-tight">Deanery Financial Ledger Matrix</h1>
+          <h1 className="text-xl font-black text-gray-900 tracking-tight">{isPresident ? 'My Parish Financial Ledger' : 'Deanery Financial Ledger Matrix'}</h1>
           <p className="text-[11px] text-gray-400 mt-0.5">
-            The ledger matrix is generated from the centralized parish registry and renders columns from your active fee configuration.
+            {isPresident
+              ? 'View payments, targets, and outstanding balances for your assigned parish.'
+              : 'The ledger matrix is generated from the centralized parish registry and renders columns from your active fee configuration.'}
           </p>
         </div>
         <div className="flex flex-col items-start gap-3 sm:flex-row sm:flex-wrap sm:items-center">
@@ -385,25 +391,35 @@ export default function FinancialLedger() {
               </div>
             ))}
             <div className="rounded-2xl border border-indigo-100 bg-indigo-950 p-4 text-white">
-              <p className="text-[10px] uppercase tracking-[0.28em] text-indigo-300 mb-1">Grand Year Total</p>
+              <p className="text-[10px] uppercase tracking-[0.28em] text-indigo-300 mb-1">{isPresident ? 'Your Parish Total' : 'Grand Year Total'}</p>
               <p className="text-xl font-black">₦{totals.grandTotal.toLocaleString()}</p>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4">
-            <div className="rounded-2xl border border-slate-200 bg-emerald-50 p-4">
-              <p className="text-[10px] uppercase tracking-[0.28em] text-emerald-700 mb-1">Total Parishes</p>
-              <p className="text-2xl font-black text-emerald-900">{summary.totalParishes}</p>
+          {!isPresident && (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4">
+              <div className="rounded-2xl border border-slate-200 bg-emerald-50 p-4">
+                <p className="text-[10px] uppercase tracking-[0.28em] text-emerald-700 mb-1">Total Parishes</p>
+                <p className="text-2xl font-black text-emerald-900">{summary.totalParishes}</p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-emerald-100 p-4">
+                <p className="text-[10px] uppercase tracking-[0.28em] text-emerald-800 mb-1">Compliant Parishes</p>
+                <p className="text-2xl font-black text-emerald-900">{summary.compliantParishes}</p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-rose-100 p-4">
+                <p className="text-[10px] uppercase tracking-[0.28em] text-rose-700 mb-1">Outstanding Parishes</p>
+                <p className="text-2xl font-black text-rose-900">{summary.outstandingParishes}</p>
+              </div>
             </div>
-            <div className="rounded-2xl border border-slate-200 bg-emerald-100 p-4">
-              <p className="text-[10px] uppercase tracking-[0.28em] text-emerald-800 mb-1">Compliant Parishes</p>
-              <p className="text-2xl font-black text-emerald-900">{summary.compliantParishes}</p>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-rose-100 p-4">
-              <p className="text-[10px] uppercase tracking-[0.28em] text-rose-700 mb-1">Outstanding Parishes</p>
-              <p className="text-2xl font-black text-rose-900">{summary.outstandingParishes}</p>
-            </div>
-          </div>
+          )}
+            {isPresident && (
+              <div className={`mt-4 rounded-2xl border p-4 ${ownParishCompliant ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-amber-200 bg-amber-50 text-amber-800'}`}>
+                <p className="text-[10px] uppercase tracking-[0.28em] font-bold">Your parish compliance</p>
+                <p className="mt-1 text-lg font-black">
+                  {feeTypes.length === 0 ? 'No fee categories configured' : ownParishCompliant ? 'Compliant' : 'Outstanding'}
+                </p>
+              </div>
+            )}
         </div>
 
         {isExecutiveOrHigher && (
@@ -474,7 +490,7 @@ export default function FinancialLedger() {
         )}
       </div>
 
-      <div className="bg-white p-3 rounded-xl shadow-sm border border-gray-100 flex flex-col md:flex-row gap-3 justify-between items-center print:hidden">
+      {!isPresident && <div className="bg-white p-3 rounded-xl shadow-sm border border-gray-100 flex flex-col md:flex-row gap-3 justify-between items-center print:hidden">
         <div className="w-full md:w-96 relative">
           <input
             type="text"
@@ -495,7 +511,7 @@ export default function FinancialLedger() {
             </button>
           ))}
         </div>
-      </div>
+      </div>}
 
       <div className="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-200">
         <div className="bg-indigo-950 px-4 py-3 text-white font-bold text-sm tracking-wide">Parish fee ledger matrix · {currentYear}</div>

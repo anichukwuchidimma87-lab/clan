@@ -20,9 +20,15 @@ export default function Users() {
   const [roleDialogError, setRoleDialogError] = useState('');
   const [approvingUserId, setApprovingUserId] = useState(null);
   const [updatingRole, setUpdatingRole] = useState(false);
+  const [accountDialog, setAccountDialog] = useState(null);
+  const [accountDialogError, setAccountDialogError] = useState('');
+  const [updatingAccount, setUpdatingAccount] = useState(false);
 
   const apiBase = import.meta.env.VITE_API_URL || 'https://clan-3slh.onrender.com';
   const token = localStorage.getItem('clan_token');
+  const actorId = useMemo(() => {
+    try { return JSON.parse(atob(token.split('.')[1])).id; } catch { return ''; }
+  }, [token]);
 
   const fetchUsers = async () => {
     setLoading(true);
@@ -112,7 +118,7 @@ export default function Users() {
 
     setUpdatingRole(true);
     try {
-      await axios.patch(
+      const response = await axios.patch(
         `${apiBase}/api/v1/users/${roleDialog.user._id}/role`,
         { role: nextRole, parish, permissions },
         { headers: { Authorization: `Bearer ${token}` } }
@@ -120,7 +126,7 @@ export default function Users() {
 
       setUsers((current) => current.map((item) =>
         item._id === roleDialog.user._id
-          ? { ...item, role: nextRole, parish, permissions }
+          ? response.data?.user || { ...item, role: nextRole, parish, permissions }
           : item
       ));
       setMessage({ text: 'User access updated successfully.', isError: false });
@@ -130,6 +136,35 @@ export default function Users() {
       setRoleDialogError(error.response?.data?.message || 'Role update failed. You may lack sufficient clearance.');
     } finally {
       setUpdatingRole(false);
+    }
+  };
+
+  const saveAccount = async (event) => {
+    event.preventDefault();
+    if (!accountDialog || updatingAccount) return;
+    setUpdatingAccount(true);
+    setAccountDialogError('');
+    try {
+      const payload = {
+        email: accountDialog.email,
+        status: accountDialog.status
+      };
+      if (accountDialog.password) payload.password = accountDialog.password;
+
+      const response = await axios.patch(
+        `${apiBase}/api/v1/users/${accountDialog.user._id}/account`,
+        payload,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setUsers((current) => current.map((user) =>
+        user._id === accountDialog.user._id ? response.data.user : user
+      ));
+      setMessage({ text: 'Account details saved.', isError: false });
+      setAccountDialog(null);
+    } catch (error) {
+      setAccountDialogError(error.response?.data?.message || 'Account update failed.');
+    } finally {
+      setUpdatingAccount(false);
     }
   };
 
@@ -288,7 +323,9 @@ export default function Users() {
                   <div>
                     <p className="text-lg font-black text-slate-900">{user.name}</p>
                     <p className="mt-1 text-sm text-slate-500">{user.email}</p>
-                    <p className="mt-2 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">{user.position || 'Member'}</p>
+                    <p className="mt-2 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">
+                      {user.position || 'Member'} · {user.status || 'approved'}
+                    </p>
                   </div>
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
                     <select
@@ -332,6 +369,21 @@ export default function Users() {
                         </div>
                       </>
                     )}
+                    {user._id !== actorId && <button
+                      type="button"
+                      onClick={() => {
+                        setAccountDialogError('');
+                        setAccountDialog({
+                          user,
+                          email: user.email || '',
+                          password: '',
+                          status: user.status || 'approved'
+                        });
+                      }}
+                      className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
+                    >
+                      Manage account
+                    </button>}
                   </div>
                 </div>
               </article>
@@ -372,6 +424,63 @@ export default function Users() {
                 </button>
               </div>
             </div>
+          </div>
+        )}
+        {accountDialog && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4" role="dialog" aria-modal="true" aria-labelledby="account-dialog-title">
+            <form onSubmit={saveAccount} className="w-full max-w-md space-y-4 rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-indigo-600">Account management</p>
+                <h2 id="account-dialog-title" className="mt-2 text-xl font-black text-slate-900">Update {accountDialog.user.name}</h2>
+              </div>
+              <label className="block text-xs font-bold text-slate-600">
+                Email address
+                <input
+                  type="email"
+                  required
+                  value={accountDialog.email}
+                  onChange={(event) => setAccountDialog((current) => ({ ...current, email: event.target.value }))}
+                  className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-800"
+                />
+              </label>
+              <label className="block text-xs font-bold text-slate-600">
+                Set a new password
+                <input
+                  type="password"
+                  autoComplete="new-password"
+                  minLength={8}
+                  value={accountDialog.password}
+                  onChange={(event) => setAccountDialog((current) => ({ ...current, password: event.target.value }))}
+                  placeholder="Leave blank to keep current password"
+                  className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-800"
+                />
+              </label>
+              <label className="block text-xs font-bold text-slate-600">
+                Account status
+                <select
+                  value={accountDialog.status}
+                  onChange={(event) => setAccountDialog((current) => ({ ...current, status: event.target.value }))}
+                  className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-800"
+                >
+                  <option value="approved">Active</option>
+                  <option value="disabled">Disabled</option>
+                </select>
+              </label>
+              {accountDialog.status === 'disabled' && accountDialog.user.status !== 'disabled' && (
+                <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
+                  This user will be signed out on their next request and will not be able to log in.
+                </p>
+              )}
+              {accountDialogError && <StatusNotice type="error">{accountDialogError}</StatusNotice>}
+              <div className="flex justify-end gap-3 pt-2">
+                <button type="button" onClick={() => setAccountDialog(null)} disabled={updatingAccount} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-60">
+                  Cancel
+                </button>
+                <button type="submit" disabled={updatingAccount} className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">
+                  {updatingAccount ? 'Saving...' : 'Save account'}
+                </button>
+              </div>
+            </form>
           </div>
         )}
       </div>

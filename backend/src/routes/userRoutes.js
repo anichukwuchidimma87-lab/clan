@@ -7,7 +7,8 @@ import {
   getCurrentUserProfile,
   getUserProfile,
   updateUserProfile,
-  updateUserRole
+  updateUserRole,
+  updateUserAccount
 } from '../controllers/userController.js';
 import { protect, authorizeApproval } from '../middleware/authMiddleware.js';
 import upload from '../middleware/uploadMiddleware.js';
@@ -20,6 +21,7 @@ router.get('/me', protect, getCurrentUserProfile);
 router.get('/profile/:userId', protect, getUserProfile);
 router.patch('/approve/:id', protect, authorizeApproval, approveUser);
 router.patch('/:id/role', protect, authorizeApproval, updateUserRole);
+router.patch('/:id/account', protect, authorizeApproval, updateUserAccount);
 router.post('/executive', protect, authorizeApproval, createExecutiveMember);
 router.patch('/profile/:userId', protect, upload.single('profileImage'), updateUserProfile);
 

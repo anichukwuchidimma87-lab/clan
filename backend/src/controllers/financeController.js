@@ -13,12 +13,14 @@ const slugify = (value = '') =>
     .replace(/--+/g, '-')
     .replace(/^-+|-+$/g, '');
 
-const buildLedgerData = async (year) => {
+const buildLedgerData = async (year, parishId = null) => {
+  const parishFilter = parishId ? { _id: parishId } : {};
+  const entryFilter = parishId ? { year, parish: parishId } : { year };
   const [parishes, feeTypes, targets, entries] = await Promise.all([
-    Parish.find().sort({ name: 1 }).lean(),
+    Parish.find(parishFilter).sort({ name: 1 }).lean(),
     FeeType.find({ active: true }).sort({ name: 1 }).lean(),
     FeeTarget.find({ year }).lean(),
-    LedgerEntry.find({ year }).lean()
+    LedgerEntry.find(entryFilter).lean()
   ]);
 
   const targetMap = new Map(targets.map(target => [String(target.feeType), target]));
@@ -70,11 +72,27 @@ const buildLedgerData = async (year) => {
 export const getLedger = async (req, res) => {
   try {
     const year = parseInt(req.query.year, 10) || new Date().getFullYear();
-    const data = await buildLedgerData(year);
+    const role = req.user.role;
+    let parishId = null;
+    if (role === 'president') {
+      if (!req.user.parish) {
+        return res.status(403).json({ success: false, message: 'Your account is not assigned to a parish.' });
+      }
+      const parish = await Parish.findOne({ name: req.user.parish }).select('_id').lean();
+      if (!parish) {
+        return res.status(404).json({ success: false, message: 'Your assigned parish could not be found.' });
+      }
+      parishId = parish._id;
+    } else if (!['superadmin', 'executive'].includes(role)) {
+      return res.status(403).json({ success: false, message: 'Not authorized to view the financial ledger.' });
+    }
+
+    const data = await buildLedgerData(year, parishId);
 
     res.status(200).json({
       success: true,
       year,
+      scope: parishId ? 'ownParish' : 'all',
       data
     });
   } catch (error) {
@@ -85,11 +103,26 @@ export const getLedger = async (req, res) => {
 export const getLedgerSummary = async (req, res) => {
   try {
     const year = parseInt(req.query.year, 10) || new Date().getFullYear();
-    const data = await buildLedgerData(year);
+    let parishId = null;
+    if (req.user.role === 'president') {
+      if (!req.user.parish) {
+        return res.status(403).json({ success: false, message: 'Your account is not assigned to a parish.' });
+      }
+      const parish = await Parish.findOne({ name: req.user.parish }).select('_id').lean();
+      if (!parish) {
+        return res.status(404).json({ success: false, message: 'Your assigned parish could not be found.' });
+      }
+      parishId = parish._id;
+    } else if (!['superadmin', 'executive'].includes(req.user.role)) {
+      return res.status(403).json({ success: false, message: 'Not authorized to view the financial summary.' });
+    }
+
+    const data = await buildLedgerData(year, parishId);
 
     res.status(200).json({
       success: true,
       year,
+      scope: parishId ? 'ownParish' : 'all',
       data: {
         summary: data.summary
       }

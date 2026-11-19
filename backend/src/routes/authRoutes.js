@@ -50,7 +50,15 @@ router.post('/register', async (req, res) => {
   try {
     const { name, email, password, role, yearCommissioned, title, firstName, lastName, parish, requestedRole, requestedParish } = req.body;
 
-    const userExists = await User.findOne({ email });
+    const normalizedEmail = String(email || '').trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+      return res.status(400).json({ message: 'Enter a valid email address.' });
+    }
+    if (typeof password !== 'string' || password.length < 8) {
+      return res.status(400).json({ message: 'Password must be at least 8 characters.' });
+    }
+    const escapedEmail = normalizedEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const userExists = await User.findOne({ email: { $regex: `^${escapedEmail}$`, $options: 'i' } });
     if (userExists) {
       return res.status(400).json({ message: "User already exists" });
     }
@@ -64,7 +72,7 @@ router.post('/register', async (req, res) => {
       firstName: String(firstName || parsedName.firstName || '').trim(),
       lastName: String(lastName || parsedName.lastName || '').trim(),
       name: String(name || parsedName.name || '').trim() || [parsedName.title, parsedName.firstName, parsedName.lastName].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim(),
-      email,
+      email: normalizedEmail,
       password: hashedPassword,
       role: 'member',
       status: 'pending',
@@ -110,7 +118,9 @@ router.post('/register', async (req, res) => {
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
-    const user = await User.findOne({ email });
+    const normalizedEmail = String(email || '').trim().toLowerCase();
+    const escapedEmail = normalizedEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const user = await User.findOne({ email: { $regex: `^${escapedEmail}$`, $options: 'i' } });
 
     if (!user) {
       return res.status(401).json({ message: "Invalid credentials" });
@@ -121,12 +131,17 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ message: "Invalid credentials" });
     }
     if (user.status !== 'approved') {
-      return res.status(403).json({ message: 'Your account is pending approval.' });
+      return res.status(403).json({
+        message: user.status === 'disabled'
+          ? 'Your account has been disabled. Contact an administrator.'
+          : 'Your account is pending approval.'
+      });
     }
 
     const normalizedRole = normalizeUserRole(user.role);
-    if (user.role !== normalizedRole) {
+    if (user.role !== normalizedRole || user.email !== normalizedEmail) {
       user.role = normalizedRole;
+      user.email = normalizedEmail;
       await user.save();
     }
 
@@ -141,7 +156,8 @@ router.post('/login', async (req, res) => {
         email: user.email,
         parish: user.parish || '',
         phone: user.phone || '',
-        permissions: user.permissions || {}
+        permissions: user.permissions || {},
+        tokenVersion: user.tokenVersion || 0
       },
       process.env.JWT_SECRET,
       { expiresIn: '24h' }

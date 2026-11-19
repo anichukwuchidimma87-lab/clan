@@ -3,6 +3,8 @@ import mongoose from 'mongoose';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import { normalizeUserRole } from '../utils/roleUtils.js';
+import AuditLog from '../models/AuditLog.js';
+import Parish from '../models/Parish.js';
 
 const leadershipPositions = [
   'President',
@@ -61,20 +63,31 @@ export const approveUser = async (req, res) => {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    if (user.status === 'approved') {
-      return res.status(400).json({ message: 'User is already approved' });
+    if (user.status !== 'pending') {
+      return res.status(400).json({ message: 'Only pending accounts can be approved.' });
     }
 
     const { role, parish, permissions } = req.body;
     const normalizedRole = normalizeUserRole(role || user.requestedRole || 'member');
 
+    if (normalizedRole === 'superadmin' && req.user.role !== 'superadmin') {
+      return res.status(403).json({ message: 'Only a superadmin may assign the superadmin role.' });
+    }
     if (normalizedRole === 'president' && !parish) {
       return res.status(400).json({ message: 'A parish is required when approving a parish president.' });
+    }
+    let assignedParish = '';
+    if (normalizedRole === 'president') {
+      const parishRecord = await Parish.findOne({ name: String(parish).trim() }).select('name').lean();
+      if (!parishRecord) {
+        return res.status(400).json({ message: 'Select a parish from the master parish directory.' });
+      }
+      assignedParish = parishRecord.name;
     }
 
     user.status = 'approved';
     user.role = normalizedRole;
-    user.parish = normalizedRole === 'president' ? String(parish).trim() : '';
+    user.parish = assignedParish;
     if (normalizedRole === 'president') {
       user.permissions = {
         view: permissions?.view ?? true,
@@ -95,13 +108,30 @@ export const approveUser = async (req, res) => {
       };
     }
     await user.save();
+    await AuditLog.create({
+      action: 'user-approved',
+      user: req.user._id,
+      userRole: req.user.role,
+      affectedCount: 1,
+      ids: [String(user._id)],
+      notes: `Approved as ${user.role}; parish ${user.parish || 'unassigned'}`
+    });
 
     res.json({
       success: true,
       message: normalizedRole === 'president'
         ? 'User account approved as parish president.'
         : 'User account approved successfully.',
-      user
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        status: user.status,
+        position: user.position,
+        parish: user.parish,
+        permissions: user.permissions
+      }
     });
   } catch (error) {
     console.error('Error approving user:', error);
@@ -124,11 +154,20 @@ export const updateUserRole = async (req, res) => {
     if (!allowedRoles.includes(normalizedRole)) {
       return res.status(400).json({ success: false, message: 'Invalid role selected.' });
     }
-
+    if (req.user.role !== 'superadmin' && (targetUser.role === 'superadmin' || normalizedRole === 'superadmin')) {
+      return res.status(403).json({ success: false, message: 'Only a superadmin may change a superadmin account.' });
+    }
+    if (targetUser.role === 'superadmin' && normalizedRole !== 'superadmin') {
+      const activeSuperadmins = await User.countDocuments({ role: 'superadmin', status: 'approved' });
+      if (activeSuperadmins <= 1) {
+        return res.status(400).json({ success: false, message: 'The last approved superadmin cannot be demoted.' });
+      }
+    }
     targetUser.role = normalizedRole;
     if (normalizedRole === 'president') {
-      if (!parish) return res.status(400).json({ success: false, message: 'A parish is required for a president.' });
-      targetUser.parish = String(parish).trim();
+      const parishRecord = await Parish.findOne({ name: String(parish || '').trim() }).select('name').lean();
+      if (!parishRecord) return res.status(400).json({ success: false, message: 'Select a parish from the master parish directory.' });
+      targetUser.parish = parishRecord.name;
       targetUser.permissions = {
         view: permissions?.view ?? targetUser.permissions?.view ?? true,
         export: permissions?.export ?? targetUser.permissions?.export ?? true,
@@ -148,7 +187,16 @@ export const updateUserRole = async (req, res) => {
         delete: false
       };
     }
+    targetUser.tokenVersion = Number(targetUser.tokenVersion || 0) + 1;
     await targetUser.save();
+    await AuditLog.create({
+      action: 'user-role-updated',
+      user: req.user._id,
+      userRole: req.user.role,
+      affectedCount: 1,
+      ids: [String(targetUser._id)],
+      notes: `Role set to ${targetUser.role}; parish ${targetUser.parish || 'unassigned'}; permissions updated`
+    });
 
     res.json({
       success: true,
@@ -167,6 +215,114 @@ export const updateUserRole = async (req, res) => {
   } catch (error) {
     console.error('Error updating user role:', error);
     res.status(500).json({ success: false, message: 'Server error updating user role' });
+  }
+};
+
+export const updateUserAccount = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.isValidObjectId(id)) {
+      return res.status(400).json({ success: false, message: 'Invalid user identifier.' });
+    }
+
+    const user = await User.findById(id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found.' });
+    }
+    if (String(user._id) === String(req.user._id)) {
+      return res.status(400).json({ success: false, message: 'Use your profile settings to update your own account.' });
+    }
+
+    if (req.user.role !== 'superadmin' && user.role === 'superadmin') {
+      return res.status(403).json({ success: false, message: 'Only a superadmin may manage a superadmin account.' });
+    }
+
+    const { email, password, status } = req.body;
+    const changes = [];
+
+    if (String(user._id) === String(req.user._id) && status === 'disabled') {
+      return res.status(400).json({ success: false, message: 'You cannot disable your own account.' });
+    }
+
+    if (email !== undefined) {
+      const normalizedEmail = String(email).trim().toLowerCase();
+      if (!normalizedEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+        return res.status(400).json({ success: false, message: 'Enter a valid email address.' });
+      }
+      const escapedEmail = normalizedEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const existing = await User.findOne({
+        email: { $regex: `^${escapedEmail}$`, $options: 'i' },
+        _id: { $ne: user._id }
+      }).select('_id').lean();
+      if (existing) {
+        return res.status(409).json({ success: false, message: 'That email address is already in use.' });
+      }
+      if (normalizedEmail !== user.email) {
+        user.email = normalizedEmail;
+        changes.push('email changed');
+      }
+    }
+
+    if (password !== undefined && String(password).length > 0) {
+      const nextPassword = String(password);
+      if (nextPassword.length < 8) {
+        return res.status(400).json({ success: false, message: 'Password must be at least 8 characters.' });
+      }
+      user.password = await bcrypt.hash(nextPassword, await bcrypt.genSalt(10));
+      changes.push('password reset');
+    }
+
+    if (status !== undefined) {
+      if (!['approved', 'disabled'].includes(status)) {
+        return res.status(400).json({ success: false, message: 'Account status must be approved or disabled.' });
+      }
+      if (user.role === 'superadmin' && status !== 'approved') {
+        const activeSuperadmins = await User.countDocuments({ role: 'superadmin', status: 'approved' });
+        if (activeSuperadmins <= 1) {
+          return res.status(400).json({ success: false, message: 'The last approved superadmin cannot be disabled.' });
+        }
+      }
+      if (user.status !== status) {
+        user.status = status;
+        changes.push(`status set to ${status}`);
+      }
+    }
+
+    if (changes.length === 0) {
+      return res.status(400).json({ success: false, message: 'No account changes were provided.' });
+    }
+
+    user.tokenVersion = Number(user.tokenVersion || 0) + 1;
+    await user.save();
+    await AuditLog.create({
+      action: 'user-account-updated',
+      user: req.user._id,
+      userRole: req.user.role,
+      affectedCount: 1,
+      ids: [String(user._id)],
+      notes: changes.join('; ')
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'User account updated.',
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        status: user.status,
+        position: user.position,
+        parish: user.parish,
+        permissions: user.permissions
+      }
+    });
+  } catch (error) {
+    console.error('Error updating user account:', error);
+    if (error.code === 11000) {
+      return res.status(409).json({ success: false, message: 'That email address is already in use.' });
+    }
+    res.status(500).json({ success: false, message: 'Server error updating user account.' });
   }
 };
 
@@ -223,7 +379,7 @@ export const createExecutiveMember = async (req, res) => {
       lastName: normalizedLastName,
       name: resolvedName,
       email: normalizedEmail,
-      password: password || 'Executive@2026',
+      password: await bcrypt.hash(password || 'Executive@2026', await bcrypt.genSalt(10)),
       role: 'member',
       status: 'approved',
       position: String(position).trim(),
@@ -378,6 +534,7 @@ export const updateUserProfile = async (req, res) => {
 
     const profileImage = req.file?.path;
     const user = await User.findById(userId);
+    const sensitiveChanges = [];
 
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
@@ -404,13 +561,26 @@ export const updateUserProfile = async (req, res) => {
     if (profileTitle !== undefined) {
       user.profileTitle = profileTitle ? String(profileTitle).trim() : '';
     }
-    if (email !== undefined && email !== null && String(email).trim()) {
-      user.email = String(email).trim();
+    if (email !== undefined) {
+      const normalizedEmail = String(email || '').trim().toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+        return res.status(400).json({ success: false, message: 'Enter a valid email address.' });
+      }
+      const escapedEmail = normalizedEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const existingEmail = await User.findOne({
+        _id: { $ne: user._id },
+        email: { $regex: `^${escapedEmail}$`, $options: 'i' }
+      }).select('_id').lean();
+      if (existingEmail) {
+        return res.status(409).json({ success: false, message: 'That email address is already in use.' });
+      }
+      if (user.email !== normalizedEmail) sensitiveChanges.push('email changed');
+      user.email = normalizedEmail;
     }
     if (phone !== undefined) {
       user.phone = phone ? String(phone).trim() : '';
     }
-    if (parish !== undefined) {
+    if (parish !== undefined && isAdmin) {
       user.parish = parish ? String(parish).trim() : '';
     }
     if (executiveSessionStart !== undefined) {
@@ -445,11 +615,26 @@ export const updateUserProfile = async (req, res) => {
       user.profileImage = profileImage;
     }
     if (password && String(password).trim()) {
-      const salt = await bcrypt.genSalt(10);
-      user.password = await bcrypt.hash(String(password).trim(), salt);
+      const nextPassword = String(password);
+      if (nextPassword.length < 8) {
+        return res.status(400).json({ success: false, message: 'Password must be at least 8 characters.' });
+      }
+      user.password = await bcrypt.hash(nextPassword, await bcrypt.genSalt(10));
+      sensitiveChanges.push('password reset');
     }
 
+    user.tokenVersion = Number(user.tokenVersion || 0) + 1;
     await user.save();
+    if (sensitiveChanges.length > 0) {
+      await AuditLog.create({
+        action: 'user-profile-credentials-updated',
+        user: req.user._id,
+        userRole: req.user.role,
+        affectedCount: 1,
+        ids: [String(user._id)],
+        notes: sensitiveChanges.join('; ')
+      });
+    }
 
     const safeUser = {
       _id: user._id,
@@ -474,7 +659,7 @@ export const updateUserProfile = async (req, res) => {
       homepageOrder: user.homepageOrder,
     };
 
-    const token = jwt.sign(
+    const token = isSelf ? jwt.sign(
       {
         id: user._id,
         role: user.role,
@@ -484,17 +669,19 @@ export const updateUserProfile = async (req, res) => {
         name: user.name || [user.title, user.firstName, user.lastName].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim(),
         email: user.email,
         parish: user.parish || '',
-        phone: user.phone || ''
+        phone: user.phone || '',
+        permissions: user.permissions || {},
+        tokenVersion: user.tokenVersion || 0
       },
       process.env.JWT_SECRET,
       { expiresIn: '24h' }
-    );
+    ) : null;
 
     res.json({
       success: true,
       message: 'User profile updated successfully',
       user: safeUser,
-      token,
+      ...(token ? { token } : {})
     });
   } catch (error) {
     console.error('Error updating user profile:', error);

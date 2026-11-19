@@ -70,6 +70,7 @@ export default function RegistryManagement() {
   };
   const payload = token ? parseJwt(token) : null;
   const userRole = payload?.role === 'admin' ? 'executive' : (payload?.role || 'member');
+  const isPresident = userRole === 'president';
   const canEditRegistry = ['superadmin', 'executive'].includes(userRole) || (userRole === 'president' && Boolean(payload?.permissions?.update));
   const canExportRegistry = ['superadmin', 'executive'].includes(userRole) || (userRole === 'president' && Boolean(payload?.permissions?.export));
   const canAddRegistry = ['superadmin', 'executive'].includes(userRole) || (userRole === 'president' && Boolean(payload?.permissions?.add));
@@ -181,14 +182,20 @@ export default function RegistryManagement() {
       const statusParam = statusFilter === 'all' ? 'all' : statusFilter;
       const [membersRes, parishesRes, birthdaysRes] = await Promise.all([
         fetch(`https://clan-3slh.onrender.com/api/lectors/registry?limit=1000&page=1&search=${encodeURIComponent(searchQuery)}&status=${encodeURIComponent(statusParam)}`, { headers: { Authorization: `Bearer ${token}` } }),
-        fetch('https://clan-3slh.onrender.com/api/v1/parishes/with-counts', { headers }),
+        isPresident
+          ? Promise.resolve(null)
+          : fetch('https://clan-3slh.onrender.com/api/v1/parishes/with-counts', { headers }),
         fetch('https://clan-3slh.onrender.com/api/lectors/birthdays?days=30', { headers: { Authorization: `Bearer ${token}` } })
       ]);
 
       const membersJson = await membersRes.json();
-      const parishesJson = await parishesRes.json();
+      const parishesJson = parishesRes ? await parishesRes.json() : null;
       const birthdaysJson = await birthdaysRes.json();
       if (birthdaysJson.success) setUpcomingBirthdays(birthdaysJson.data || []);
+
+      if (!membersRes.ok || !membersJson.success) {
+        throw new Error(membersJson.message || 'Unable to load the parish roster.');
+      }
 
       if (membersJson.success) {
         // capture authoritative total from backend when available
@@ -202,12 +209,12 @@ export default function RegistryManagement() {
         } else {
           const allMembers = membersJson.ownParish || membersJson.data || [];
           setMembers(allMembers);
-          setPage(1);
-          setTotalPages(1);
+          setPage(membersJson.page || 1);
+          setTotalPages(membersJson.totalPages || 1);
         }
       }
 
-      if (parishesJson.success) {
+      if (parishesJson?.success) {
         // backend now returns lectorCount on each parish
         setParishes(parishesJson.data.map(p => ({ ...p, lectorCount: p.lectorCount || 0 })));
         // fetch deanery-level targets
@@ -224,6 +231,7 @@ export default function RegistryManagement() {
       }
     } catch (error) {
       console.error('Registry fetch failed:', error);
+      setAlertMessage({ type: 'error', text: error.message || 'Unable to load the parish roster.' });
     } finally {
       setLoading(false);
     }
@@ -1036,16 +1044,18 @@ export default function RegistryManagement() {
         <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-6 rounded-3xl shadow-lg border border-slate-700 mb-6">
           <div className="flex flex-col md:flex-row justify-between gap-4 items-start md:items-center">
             <div>
-              <p className="text-[10px] uppercase tracking-[0.32em] text-indigo-200 font-semibold">Registry command center</p>
-              <h1 className="mt-2 text-3xl font-extrabold text-white">Unified Registry Hub</h1>
+              <p className="text-[10px] uppercase tracking-[0.32em] text-indigo-200 font-semibold">{isPresident ? 'Parish roster' : 'Registry command center'}</p>
+              <h1 className="mt-2 text-3xl font-extrabold text-white">{isPresident ? `${payload?.parish || 'My Parish'} Lector Roster` : 'Unified Registry Hub'}</h1>
               <p className="mt-2 text-slate-300 max-w-2xl text-sm">
-                One source of truth for all parishes and lectors. Add, edit, transfer, and archive records from a single centralized interface.
+                {isPresident
+                  ? 'View and manage lector records for your assigned parish according to the permissions granted to your account.'
+                  : 'One source of truth for all parishes and lectors. Add, edit, transfer, and archive records from a single centralized interface.'}
               </p>
             </div>
             <div className="flex flex-wrap gap-3 items-center">
               <span className="rounded-full bg-white/10 text-indigo-100 border border-white/10 px-4 py-2 font-semibold backdrop-blur-sm">{payload?.role || 'Guest'}</span>
               <button onClick={() => setActiveTab('lectors')} className={`px-4 py-2 rounded-2xl ${activeTab === 'lectors' ? 'bg-white text-slate-900 shadow-sm' : 'bg-white/5 text-slate-200 border border-white/10 hover:bg-white/10'}`}>Lector Roster</button>
-              <button onClick={() => setActiveTab('parishes')} className={`px-4 py-2 rounded-2xl ${activeTab === 'parishes' ? 'bg-white text-slate-900 shadow-sm' : 'bg-white/5 text-slate-200 border border-white/10 hover:bg-white/10'}`}>Parish Directory</button>
+              {!isPresident && <button onClick={() => setActiveTab('parishes')} className={`px-4 py-2 rounded-2xl ${activeTab === 'parishes' ? 'bg-white text-slate-900 shadow-sm' : 'bg-white/5 text-slate-200 border border-white/10 hover:bg-white/10'}`}>Parish Directory</button>}
               {['superadmin', 'executive'].includes(userRole) && (
                 <button onClick={() => window.location.href = '/admin/audit'} className="px-3 py-2 rounded-2xl bg-white/10 text-white/80 border border-white/10">Audit Logs</button>
               )}
@@ -1214,7 +1224,7 @@ export default function RegistryManagement() {
                   className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 focus:border-indigo-300 focus:outline-none"
                 />
 
-                {activeTab === 'lectors' && (
+                {activeTab === 'lectors' && !isPresident && (
                   <select value={parishFilter} onChange={(e) => setParishFilter(e.target.value)} className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-700 focus:border-indigo-300 focus:outline-none">
                     <option value="all">All Parishes</option>
                     {parishOptions.map(parish => (
@@ -1273,13 +1283,13 @@ export default function RegistryManagement() {
                   >
                     Clear selection
                   </button>
-                  <button
+                  {canExportRegistry && <button
                     type="button"
                     onClick={exportSelectedCsv}
                     className="rounded-xl bg-indigo-600 px-3 py-2 text-[11px] font-semibold text-white hover:bg-indigo-700"
                   >
                     Export selected
-                  </button>
+                  </button>}
                     {activeTab === 'lectors' && canSuspendRegistry && (
                       <>
                         <button

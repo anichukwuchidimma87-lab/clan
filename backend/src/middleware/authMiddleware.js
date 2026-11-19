@@ -22,6 +22,9 @@ export const protect = async (req, res, next) => {
     if (!req.user) {
       return res.status(401).json({ message: 'User no longer exists' });
     }
+    if (Number(decoded.tokenVersion || 0) !== Number(req.user.tokenVersion || 0)) {
+      return res.status(401).json({ message: 'Session expired. Please sign in again.' });
+    }
     if (req.user.status !== 'approved') {
       return res.status(403).json({ message: 'Account approval is required.' });
     }

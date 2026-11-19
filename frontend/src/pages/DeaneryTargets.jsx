@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import StatusNotice from '../components/StatusNotice';
 
+const API_BASE = import.meta.env.VITE_API_URL || 'https://clan-3slh.onrender.com';
+
 export default function DeaneryTargets() {
   const [targets, setTargets] = useState({});
   const [zones, setZones] = useState([]);
@@ -17,8 +19,8 @@ export default function DeaneryTargets() {
     setError('');
     try {
       const [targetsResponse, parishesResponse] = await Promise.all([
-        fetch('/api/v1/deaneries', { headers }),
-        fetch('/api/v1/parishes/with-counts', { headers })
+        fetch(`${API_BASE}/api/v1/deaneries`, { headers }),
+        fetch(`${API_BASE}/api/v1/parishes/with-counts`, { headers })
       ]);
       const [targetsResult, parishesResult] = await Promise.all([
         targetsResponse.json(),
@@ -54,7 +56,7 @@ export default function DeaneryTargets() {
     setFeedback(null);
     const payload = zones.map((zone) => ({ deanery: zone, healthTarget: Number(targets[zone] || 50) }));
     try {
-      const response = await fetch('/api/v1/deaneries', { method: 'POST', headers, body: JSON.stringify(payload) });
+      const response = await fetch(`${API_BASE}/api/v1/deaneries`, { method: 'POST', headers, body: JSON.stringify(payload) });
       const result = await response.json();
       if (!response.ok || !result.success) throw new Error(result.message || 'Unable to save targets.');
       setFeedback({ type: 'success', text: 'All deanery targets saved.' });
@@ -71,7 +73,7 @@ export default function DeaneryTargets() {
     setSavingZone(zone);
     setFeedback(null);
     try {
-      const response = await fetch('/api/v1/deaneries', {
+      const response = await fetch(`${API_BASE}/api/v1/deaneries`, {
         method: 'POST',
         headers,
         body: JSON.stringify({ deanery: zone, healthTarget: Number(targets[zone] || 50) })

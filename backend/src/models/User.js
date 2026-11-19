@@ -6,8 +6,9 @@ const UserSchema = new mongoose.Schema({
   middleName: { type: String, default: '' },
   lastName: { type: String, default: '' },
   name: { type: String, required: true },
-  email: { type: String, required: true, unique: true },
+  email: { type: String, required: true, unique: true, lowercase: true, trim: true },
   password: { type: String, required: true },
+  tokenVersion: { type: Number, default: 0 },
   role: {
     type: String,
     enum: ['superadmin', 'executive', 'president', 'member'],
@@ -15,7 +16,7 @@ const UserSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['pending', 'approved'],
+    enum: ['pending', 'approved', 'disabled'],
     default: 'approved'
   },
   position: {

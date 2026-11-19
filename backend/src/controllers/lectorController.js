@@ -209,6 +209,9 @@ export const getUpcomingBirthdays = async (req, res) => {
     if (!['superadmin', 'executive', 'president'].includes(role)) {
       return res.status(403).json({ success: false, message: 'Not authorized to view birthdays.' });
     }
+    if (role === 'president' && !req.user.permissions?.view) {
+      return res.status(403).json({ success: false, message: 'View permission was not granted.' });
+    }
 
     const days = Math.min(366, Math.max(1, parseInt(req.query.days, 10) || 30));
     const filter = role === 'president' ? { parishName: parish } : {};
@@ -373,21 +376,27 @@ export const getRegistryData = async (req, res) => {
       if (!req.user.permissions?.view) {
         return res.status(403).json({ success: false, message: 'View permission was not granted.' });
       }
-    }
-    if (role === 'president') {
-      const ownParishLectors = await Lector.find({
+      const filter = {
         parishName: parish,
         deanery: 'Benin',
         ...buildSearchFilter(),
         ...(status && status !== 'all' ? { status } : {})
-      }).populate('parish', 'name zone');
-      for (const lector of ownParishLectors) {
-        lector.dateOfBirth = undefined;
-      }
+      };
+      const totalCount = await Lector.countDocuments(filter);
+      const ownParishLectors = await Lector.find(filter)
+        .select('-dateOfBirth')
+        .populate('parish', 'name zone')
+        .sort({ lastName: 1, firstName: 1 })
+        .skip((page - 1) * limit)
+        .limit(limit);
 
       return res.status(200).json({
         success: true,
         scope: 'ownParish',
+        page,
+        limit,
+        totalCount,
+        totalPages: Math.ceil(totalCount / limit),
         ownParish: ownParishLectors,
         otherExecutives: []
       });
@@ -440,10 +449,14 @@ export const updateLector = async (req, res) => {
       return res.status(403).json({ message: 'Registry update permission was not granted.' });
     }
     if (role === 'president') {
+      if (parishId !== undefined || parishName !== undefined || Object.prototype.hasOwnProperty.call(updateFields, 'deanery')) {
+        return res.status(403).json({ message: 'Presidents cannot change a lector parish or deanery.' });
+      }
+      const hasNonStatusChanges = Object.keys(updateFields).some((field) => field !== 'status');
       if (Object.prototype.hasOwnProperty.call(updateFields, 'status') && !req.user.permissions?.suspend) {
         return res.status(403).json({ message: 'Suspend permission was not granted.' });
       }
-      if (!Object.prototype.hasOwnProperty.call(updateFields, 'status') && !req.user.permissions?.update) {
+      if (hasNonStatusChanges && !req.user.permissions?.update) {
         return res.status(403).json({ message: 'Update permission was not granted.' });
       }
       if (Object.prototype.hasOwnProperty.call(updateFields, 'dateOfBirth') && updateFields.dateOfBirth) {

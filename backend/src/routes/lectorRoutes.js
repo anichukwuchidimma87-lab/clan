@@ -10,7 +10,7 @@ import {
   bulkUploadParishes,
   bulkUnsuspend
 } from '../controllers/lectorController.js';
-import { protect, authorizeApproval, requirePermission } from '../middleware/authMiddleware.js'; // protect + role helpers
+import { protect, requirePermission } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
@@ -25,6 +25,6 @@ router.post('/registry', protect, requirePermission('add'), addLector);
 router.post('/parishes/bulk-upload', protect, bulkUploadParishes);
 router.put('/update/:id', protect, updateLector);
 router.delete('/delete/:id', protect, requirePermission('delete'), deleteLector);
-router.post('/bulk-unsuspend', protect, authorizeApproval, bulkUnsuspend);
+router.post('/bulk-unsuspend', protect, bulkUnsuspend);
 
 export default router;
