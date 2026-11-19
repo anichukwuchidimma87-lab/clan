@@ -30,14 +30,18 @@ export default function Dashboard() {
   };
 
   const formatUserName = (payload) => {
-    const fullName = [payload?.title || '', payload?.firstName || '', payload?.lastName || '', payload?.name || '']
+    const savedName = typeof payload?.name === 'string'
+      ? payload.name.replace(/\s+/g, ' ').trim()
+      : '';
+    if (savedName) return savedName;
+
+    const fullName = [payload?.title || '', payload?.firstName || '', payload?.lastName || '']
       .filter(Boolean)
       .join(' ')
       .replace(/\s+/g, ' ')
       .trim();
 
-    if (fullName) return fullName;
-    return `${payload?.title || 'Mr.'} ${payload?.firstName || ''} ${payload?.lastName || ''}`.trim() || 'Member';
+    return fullName || 'Member';
   };
 
   useEffect(() => {
