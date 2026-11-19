@@ -1,14 +1,22 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import ParishHealthRing from '../components/ParishHealthRing';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import * as XLSX from 'xlsx';
 
 export default function RegistryManagement() {
-  const [activeTab, setActiveTab] = useState('lectors');
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialPage = Number.parseInt(searchParams.get('page') || '1', 10);
+  const initialSort = searchParams.get('sort');
+  const [activeTab, setActiveTab] = useState(searchParams.get('tab') === 'parishes' ? 'parishes' : 'lectors');
   const [members, setMembers] = useState([]);
   const [parishes, setParishes] = useState([]);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState(searchParams.get('q') || '');
   const [loading, setLoading] = useState(true);
   const [formState, setFormState] = useState({
     firstName: '',
@@ -16,6 +24,7 @@ export default function RegistryManagement() {
     phone: '',
     gender: 'Male',
     ageBracket: '21–30',
+    dateOfBirth: '',
     yearCommissioned: new Date().getFullYear(),
     employmentStatus: 'Employed',
     parishId: '',
@@ -30,12 +39,16 @@ export default function RegistryManagement() {
   const [parishMembers, setParishMembers] = useState([]);
   const [selectedParishId, setSelectedParishId] = useState('');
   const [alertMessage, setAlertMessage] = useState(null);
+  const [confirmationDialog, setConfirmationDialog] = useState(null);
+  const [confirmationText, setConfirmationText] = useState('');
+  const [isConfirmingAction, setIsConfirmingAction] = useState(false);
+  const [isSavingRegistry, setIsSavingRegistry] = useState(false);
   const [selectedMember, setSelectedMember] = useState(null);
-  const [parishFilter, setParishFilter] = useState('all');
-  const [parishStatusFilter, setParishStatusFilter] = useState('all');
-  const [roleFilter, setRoleFilter] = useState('all');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [sortBy, setSortBy] = useState('name');
+  const [parishFilter, setParishFilter] = useState(searchParams.get('parish') || 'all');
+  const [parishStatusFilter, setParishStatusFilter] = useState(['all', 'active', 'inactive'].includes(searchParams.get('parishStatus')) ? searchParams.get('parishStatus') : 'all');
+  const [roleFilter, setRoleFilter] = useState(searchParams.get('role') || 'all');
+  const [statusFilter, setStatusFilter] = useState(['all', 'Active', 'Suspended'].includes(searchParams.get('status')) ? searchParams.get('status') : 'all');
+  const [sortBy, setSortBy] = useState(['name', 'parish', 'lastName', 'recent', 'status', 'members', 'inactive'].includes(initialSort) ? initialSort : 'name');
   const [parishReviewOpen, setParishReviewOpen] = useState(false);
   const [parishReviewTarget, setParishReviewTarget] = useState(null);
   const [deaneryTargets, setDeaneryTargets] = useState({});
@@ -43,8 +56,13 @@ export default function RegistryManagement() {
   const [drawerType, setDrawerType] = useState('lector');
   const [selectedRows, setSelectedRows] = useState([]);
   const [menuOpenId, setMenuOpenId] = useState(null);
-  const [currentPage, setCurrentPage] = useState(1);
+  const [currentPage, setCurrentPage] = useState(Number.isInteger(initialPage) && initialPage > 0 ? initialPage : 1);
   const [totalMembersCount, setTotalMembersCount] = useState(null);
+  const [upcomingBirthdays, setUpcomingBirthdays] = useState([]);
+  const confirmationInProgressRef = useRef(false);
+  const saveInProgressRef = useRef(false);
+  const registryFilterSignature = JSON.stringify([activeTab, searchQuery, parishFilter, parishStatusFilter, roleFilter, statusFilter, sortBy]);
+  const previousRegistryFilterSignature = useRef(registryFilterSignature);
 
   const token = localStorage.getItem('clan_token');
   const parseJwt = (value) => {
@@ -52,10 +70,71 @@ export default function RegistryManagement() {
   };
   const payload = token ? parseJwt(token) : null;
   const userRole = payload?.role === 'admin' ? 'executive' : (payload?.role || 'member');
-  const canEditRegistry = ['superadmin', 'executive'].includes(userRole);
+  const canEditRegistry = ['superadmin', 'executive'].includes(userRole) || (userRole === 'president' && Boolean(payload?.permissions?.update));
+  const canExportRegistry = ['superadmin', 'executive'].includes(userRole) || (userRole === 'president' && Boolean(payload?.permissions?.export));
+  const canAddRegistry = ['superadmin', 'executive'].includes(userRole) || (userRole === 'president' && Boolean(payload?.permissions?.add));
+  const canSuspendRegistry = ['superadmin', 'executive'].includes(userRole) || (userRole === 'president' && Boolean(payload?.permissions?.suspend));
+  const canDeleteRegistry = ['superadmin', 'executive'].includes(userRole) || (userRole === 'president' && Boolean(payload?.permissions?.delete));
+
+  useEffect(() => {
+    if (!alertMessage) return undefined;
+    const timeoutId = window.setTimeout(() => setAlertMessage(null), 5000);
+    return () => window.clearTimeout(timeoutId);
+  }, [alertMessage]);
+
+  const registrySearch = useMemo(() => {
+    const nextParams = new URLSearchParams();
+    if (activeTab !== 'lectors') nextParams.set('tab', activeTab);
+    if (searchQuery) nextParams.set('q', searchQuery);
+    if (parishFilter !== 'all') nextParams.set('parish', parishFilter);
+    if (parishStatusFilter !== 'all') nextParams.set('parishStatus', parishStatusFilter);
+    if (roleFilter !== 'all') nextParams.set('role', roleFilter);
+    if (statusFilter !== 'all') nextParams.set('status', statusFilter);
+    if (sortBy !== 'name') nextParams.set('sort', sortBy);
+    if (currentPage > 1) nextParams.set('page', String(currentPage));
+    return nextParams.toString();
+  }, [activeTab, searchQuery, parishFilter, parishStatusFilter, roleFilter, statusFilter, sortBy, currentPage]);
+
+  useEffect(() => {
+    setSearchParams(new URLSearchParams(registrySearch), { replace: true });
+  }, [registrySearch, setSearchParams]);
+
+  const registryUrl = (path) => `${path}${registrySearch ? `?${registrySearch}` : ''}`;
+
+  const openConfirmation = (dialog) => {
+    if (confirmationInProgressRef.current) return;
+    setConfirmationText('');
+    setConfirmationDialog(dialog);
+  };
+
+  const closeConfirmation = () => {
+    if (confirmationInProgressRef.current) return;
+    setConfirmationDialog(null);
+    setConfirmationText('');
+  };
+
+  const confirmPendingAction = async () => {
+    if (!confirmationDialog || confirmationInProgressRef.current) return;
+    if (confirmationDialog.requiredText && confirmationText !== confirmationDialog.requiredText) return;
+
+    confirmationInProgressRef.current = true;
+    setIsConfirmingAction(true);
+    try {
+      await confirmationDialog.action();
+      setConfirmationDialog(null);
+      setConfirmationText('');
+    } catch (error) {
+      console.error('Confirmed registry action failed:', error);
+      setAlertMessage({ type: 'error', text: 'The action could not be completed. Please try again.' });
+    } finally {
+      confirmationInProgressRef.current = false;
+      setIsConfirmingAction(false);
+    }
+  };
 
   const handleUpdateParish = async (e) => {
     e.preventDefault();
+    if (saveInProgressRef.current) return;
     if (!editingParish || !editingParish._id) {
       setAlertMessage({ type: 'error', text: 'No parish selected for update.' });
       return;
@@ -65,6 +144,8 @@ export default function RegistryManagement() {
       return;
     }
 
+    saveInProgressRef.current = true;
+    setIsSavingRegistry(true);
     try {
       const res = await fetch(`https://clan-3slh.onrender.com/api/v1/parishes/${editingParish._id}`, {
         method: 'PATCH',
@@ -84,6 +165,9 @@ export default function RegistryManagement() {
     } catch (err) {
       console.error('Update parish failed:', err);
       setAlertMessage({ type: 'error', text: 'Network error while updating parish.' });
+    } finally {
+      saveInProgressRef.current = false;
+      setIsSavingRegistry(false);
     }
   };
   const headers = {
@@ -95,13 +179,16 @@ export default function RegistryManagement() {
     try {
       setLoading(true);
       const statusParam = statusFilter === 'all' ? 'all' : statusFilter;
-      const [membersRes, parishesRes] = await Promise.all([
+      const [membersRes, parishesRes, birthdaysRes] = await Promise.all([
         fetch(`https://clan-3slh.onrender.com/api/lectors/registry?limit=1000&page=1&search=${encodeURIComponent(searchQuery)}&status=${encodeURIComponent(statusParam)}`, { headers: { Authorization: `Bearer ${token}` } }),
-        fetch('https://clan-3slh.onrender.com/api/v1/parishes/with-counts', { headers })
+        fetch('https://clan-3slh.onrender.com/api/v1/parishes/with-counts', { headers }),
+        fetch('https://clan-3slh.onrender.com/api/lectors/birthdays?days=30', { headers: { Authorization: `Bearer ${token}` } })
       ]);
 
       const membersJson = await membersRes.json();
       const parishesJson = await parishesRes.json();
+      const birthdaysJson = await birthdaysRes.json();
+      if (birthdaysJson.success) setUpcomingBirthdays(birthdaysJson.data || []);
 
       if (membersJson.success) {
         // capture authoritative total from backend when available
@@ -212,25 +299,31 @@ export default function RegistryManagement() {
 
   const handleAddMember = async (e) => {
     e.preventDefault();
+    if (saveInProgressRef.current) return;
     if (!formState.firstName || !formState.lastName || !formState.parishId) {
       setAlertMessage({ type: 'error', text: 'Please fill all required member fields.' });
       return;
     }
 
+    saveInProgressRef.current = true;
+    setIsSavingRegistry(true);
     try {
       const body = {
         ...formState,
         parishId: formState.parishId,
         deanery: 'Benin'
       };
-      const res = await fetch('https://clan-3slh.onrender.com/api/lectors/checkin', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const editing = Boolean(editingMember?._id);
+      const res = await fetch(editing
+        ? `https://clan-3slh.onrender.com/api/lectors/update/${editingMember._id}`
+        : 'https://clan-3slh.onrender.com/api/lectors/registry', {
+        method: editing ? 'PUT' : 'POST',
+        headers,
         body: JSON.stringify(body)
       });
       const data = await res.json();
       if (data.success) {
-        setAlertMessage({ type: 'success', text: 'Lector added to the unified registry.' });
+        setAlertMessage({ type: 'success', text: editing ? 'Lector record updated.' : 'Lector added to the unified registry.' });
         setFormState({
           firstName: '',
           lastName: '',
@@ -249,16 +342,22 @@ export default function RegistryManagement() {
     } catch (error) {
       setAlertMessage({ type: 'error', text: 'Network error while adding member.' });
       console.error(error);
+    } finally {
+      saveInProgressRef.current = false;
+      setIsSavingRegistry(false);
     }
   };
 
   const handleCreateParish = async (e) => {
     e.preventDefault();
+    if (saveInProgressRef.current) return;
     if (!newParishName.trim()) {
       setAlertMessage({ type: 'error', text: 'Parish name is required.' });
       return;
     }
 
+    saveInProgressRef.current = true;
+    setIsSavingRegistry(true);
     try {
       const res = await fetch('https://clan-3slh.onrender.com/api/v1/parishes', {
         method: 'POST',
@@ -276,6 +375,9 @@ export default function RegistryManagement() {
     } catch (error) {
       setAlertMessage({ type: 'error', text: 'Unable to create parish.' });
       console.error(error);
+    } finally {
+      saveInProgressRef.current = false;
+      setIsSavingRegistry(false);
     }
   };
 
@@ -296,24 +398,31 @@ export default function RegistryManagement() {
     }
   };
 
-  const handleDeleteParish = async (id) => {
-    if (!window.confirm('Delete this parish only if it has no assigned members.')) return;
-    try {
-      const res = await fetch(`https://clan-3slh.onrender.com/api/v1/parishes/${id}`, {
-        method: 'DELETE',
-        headers
-      });
-      const data = await res.json();
-      if (data.success) {
-        setAlertMessage({ type: 'success', text: 'Parish removed from master registry.' });
-        fetchData();
-      } else {
-        setAlertMessage({ type: 'error', text: data.message || 'Unable to delete parish.' });
+  const handleDeleteParish = (id) => {
+    const parishName = parishes.find(parish => parish._id === id)?.name || 'this parish';
+    openConfirmation({
+      title: 'Remove parish?',
+      message: `Remove ${parishName} from the master registry? This is only allowed when it has no assigned members.`,
+      confirmLabel: 'Remove parish',
+      action: async () => {
+        try {
+          const res = await fetch(`https://clan-3slh.onrender.com/api/v1/parishes/${id}`, {
+            method: 'DELETE',
+            headers
+          });
+          const data = await res.json();
+          if (data.success) {
+            setAlertMessage({ type: 'success', text: 'Parish removed from master registry.' });
+            fetchData();
+          } else {
+            setAlertMessage({ type: 'error', text: data.message || 'Unable to delete parish.' });
+          }
+        } catch (error) {
+          setAlertMessage({ type: 'error', text: 'Error deleting parish.' });
+          console.error(error);
+        }
       }
-    } catch (error) {
-      setAlertMessage({ type: 'error', text: 'Error deleting parish.' });
-      console.error(error);
-    }
+    });
   };
 
   const openLectorDrawer = (member = null) => {
@@ -325,6 +434,7 @@ export default function RegistryManagement() {
         phone: member.phone || '',
         gender: member.gender || 'Male',
         ageBracket: member.ageBracket || '21–30',
+        dateOfBirth: member.dateOfBirth ? String(member.dateOfBirth).slice(0, 10) : '',
         yearCommissioned: member.yearCommissioned || new Date().getFullYear(),
         employmentStatus: member.employmentStatus || 'Employed',
         parishId: member.parish?._id || member.parishId || parishes[0]?._id || '',
@@ -338,6 +448,7 @@ export default function RegistryManagement() {
         phone: '',
         gender: 'Male',
         ageBracket: '21–30',
+        dateOfBirth: '',
         yearCommissioned: new Date().getFullYear(),
         employmentStatus: 'Employed',
         parishId: parishes[0]?._id || '',
@@ -405,59 +516,67 @@ export default function RegistryManagement() {
     setAlertMessage({ type: 'success', text: 'Selected rows exported successfully.' });
   };
 
-  const bulkUnsuspendSelected = async () => {
+  const bulkUnsuspendSelected = () => {
     if (!selectedRows.length) {
       setAlertMessage({ type: 'error', text: 'Select at least one suspended member to unsuspend.' });
       return;
     }
 
-    if (!window.confirm(`Unsuspend ${selectedRows.length} selected member(s)? This will set their status to Active.`)) return;
-
-    try {
-      const res = await fetch('https://clan-3slh.onrender.com/api/lectors/bulk-unsuspend', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids: selectedRows })
-      });
-      const json = await res.json();
-      if (json.success) {
-        setAlertMessage({ type: 'success', text: `Unsuspended ${json.modifiedCount || 0} member(s).` });
-        clearSelection();
-        fetchData();
-      } else {
-        setAlertMessage({ type: 'error', text: json.message || 'Unable to unsuspend selected members.' });
+    const selectedIds = [...selectedRows];
+    openConfirmation({
+      title: `Unsuspend ${selectedIds.length} selected member${selectedIds.length === 1 ? '' : 's'}?`,
+      message: 'Their registry status will be changed to Active.',
+      confirmLabel: 'Unsuspend members',
+      action: async () => {
+        try {
+          const res = await fetch('https://clan-3slh.onrender.com/api/lectors/bulk-unsuspend', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ids: selectedIds })
+          });
+          const json = await res.json();
+          if (json.success) {
+            setAlertMessage({ type: 'success', text: `Unsuspended ${json.modifiedCount || 0} member(s).` });
+            clearSelection();
+            fetchData();
+          } else {
+            setAlertMessage({ type: 'error', text: json.message || 'Unable to unsuspend selected members.' });
+          }
+        } catch (err) {
+          console.error('Bulk unsuspend failed', err);
+          setAlertMessage({ type: 'error', text: 'Network error while unsuspending members.' });
+        }
       }
-    } catch (err) {
-      console.error('Bulk unsuspend failed', err);
-      setAlertMessage({ type: 'error', text: 'Network error while unsuspending members.' });
-    }
+    });
   };
 
-  const unsuspendAllSuspended = async () => {
-    const confirmText = window.prompt('Type UNSUSPEND to confirm unsuspending ALL suspended records. This action is irreversible.');
-    if (confirmText !== 'UNSUSPEND') {
-      setAlertMessage({ type: 'error', text: 'Confirmation phrase not matched. Action cancelled.' });
-      return;
-    }
-
-    try {
-      const res = await fetch('https://clan-3slh.onrender.com/api/lectors/bulk-unsuspend', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ allSuspended: true })
-      });
-      const json = await res.json();
-      if (json.success) {
-        setAlertMessage({ type: 'success', text: `Unsuspended ${json.modifiedCount || 0} member(s).` });
-        clearSelection();
-        fetchData();
-      } else {
-        setAlertMessage({ type: 'error', text: json.message || 'Unable to unsuspend all members.' });
+  const unsuspendAllSuspended = () => {
+    openConfirmation({
+      title: 'Unsuspend all records?',
+      message: 'Every suspended lector will be set to Active. This affects the entire registry and cannot be undone.',
+      confirmLabel: 'Unsuspend all',
+      requiredText: 'UNSUSPEND',
+      action: async () => {
+        try {
+          const res = await fetch('https://clan-3slh.onrender.com/api/lectors/bulk-unsuspend', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ allSuspended: true })
+          });
+          const json = await res.json();
+          if (json.success) {
+            setAlertMessage({ type: 'success', text: `Unsuspended ${json.modifiedCount || 0} member(s).` });
+            clearSelection();
+            fetchData();
+          } else {
+            setAlertMessage({ type: 'error', text: json.message || 'Unable to unsuspend all members.' });
+          }
+        } catch (err) {
+          console.error('Unsuspend all failed', err);
+          setAlertMessage({ type: 'error', text: 'Network error while unsuspending all members.' });
+        }
       }
-    } catch (err) {
-      console.error('Unsuspend all failed', err);
-      setAlertMessage({ type: 'error', text: 'Network error while unsuspending all members.' });
-    }
+    });
   };
 
   const selectSuspendedInView = () => {
@@ -592,21 +711,99 @@ export default function RegistryManagement() {
     setAlertMessage({ type: 'success', text: 'CSV export generated successfully.' });
   };
 
-  const handleDeleteMember = async (id) => {
-    if (!window.confirm('Delete this lector from the registry?')) return;
-    try {
-      const res = await fetch(`https://clan-3slh.onrender.com/api/lectors/delete/${id}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (res.ok) {
-        setAlertMessage({ type: 'success', text: 'Member removed from registry.' });
-        fetchData();
-      }
-    } catch (error) {
-      setAlertMessage({ type: 'error', text: 'Failed to delete member.' });
-      console.error(error);
+  const exportExcel = () => {
+    const rows = activeTab === 'lectors' ? filteredMembers : filteredParishes;
+    if (!rows.length) {
+      setAlertMessage({ type: 'error', text: 'There is no data to export.' });
+      return;
     }
+    const data = activeTab === 'lectors'
+      ? rows.map(row => ({
+          Name: `${row.firstName || ''} ${row.lastName || ''}`.trim(),
+          Parish: row.parishName || row.parish?.name || '',
+          Phone: row.phone || '',
+          Gender: row.gender || '',
+          'Date of Birth': row.dateOfBirth ? new Date(row.dateOfBirth).toLocaleDateString() : '',
+          Role: row.roleInParish || '',
+          Status: row.status || 'Active'
+        }))
+      : rows.map(row => ({
+          Parish: row.name || '',
+          Deanery: row.zone || 'Benin',
+          'Lector Count': row.lectorCount || 0
+        }));
+    const worksheet = XLSX.utils.json_to_sheet(data);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, activeTab === 'lectors' ? 'Lectors' : 'Parishes');
+    XLSX.writeFile(workbook, activeTab === 'lectors' ? 'lector-roster.xlsx' : 'parish-directory.xlsx');
+    setAlertMessage({ type: 'success', text: 'Excel export generated successfully.' });
+  };
+
+  const exportPdf = () => {
+    const rows = activeTab === 'lectors' ? filteredMembers : filteredParishes;
+    if (!rows.length) {
+      setAlertMessage({ type: 'error', text: 'There is no data to export.' });
+      return;
+    }
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+    doc.setFontSize(16);
+    doc.text(activeTab === 'lectors' ? 'Benin City Deanery - Lector Roster' : 'Benin City Deanery - Parish Directory', 40, 40);
+    doc.setFontSize(9);
+    doc.text(`Generated ${new Date().toLocaleString()}`, 40, 58);
+
+    if (activeTab === 'lectors') {
+      autoTable(doc, {
+        startY: 74,
+        head: [['Name', 'Parish', 'Phone', 'Gender', 'Date of Birth', 'Role', 'Status']],
+        body: rows.map(row => [
+          `${row.firstName || ''} ${row.lastName || ''}`.trim(),
+          row.parishName || row.parish?.name || '',
+          row.phone || '',
+          row.gender || '',
+          row.dateOfBirth ? new Date(row.dateOfBirth).toLocaleDateString() : '',
+          row.roleInParish || '',
+          row.status || 'Active'
+        ]),
+        styles: { fontSize: 8 }
+      });
+    } else {
+      autoTable(doc, {
+        startY: 74,
+        head: [['Parish', 'Deanery', 'Lector Count']],
+        body: rows.map(row => [row.name || '', row.zone || 'Benin', String(row.lectorCount || 0)]),
+        styles: { fontSize: 9 }
+      });
+    }
+    doc.save(activeTab === 'lectors' ? 'lector-roster.pdf' : 'parish-directory.pdf');
+    setAlertMessage({ type: 'success', text: 'PDF export generated successfully.' });
+  };
+
+  const handleDeleteMember = (id) => {
+    const member = members.find(item => item._id === id);
+    const memberName = member ? `${member.firstName || ''} ${member.lastName || ''}`.trim() : 'this member';
+    openConfirmation({
+      title: 'Archive lector?',
+      message: `Remove ${memberName} from the registry? This action cannot be undone.`,
+      confirmLabel: 'Archive lector',
+      action: async () => {
+        try {
+          const res = await fetch(`https://clan-3slh.onrender.com/api/lectors/delete/${id}`, {
+            method: 'DELETE',
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          if (res.ok) {
+            setAlertMessage({ type: 'success', text: 'Member removed from registry.' });
+            fetchData();
+          } else {
+            const data = await res.json();
+            setAlertMessage({ type: 'error', text: data.message || 'Failed to delete member.' });
+          }
+        } catch (error) {
+          setAlertMessage({ type: 'error', text: 'Failed to delete member.' });
+          console.error(error);
+        }
+      }
+    });
   };
 
   const summaryStats = useMemo(() => {
@@ -823,8 +1020,15 @@ export default function RegistryManagement() {
   }, [currentPage, pages]);
 
   useEffect(() => {
-    setCurrentPage(1);
-  }, [activeTab, searchQuery, parishFilter, roleFilter, statusFilter, sortBy]);
+    if (previousRegistryFilterSignature.current !== registryFilterSignature) {
+      previousRegistryFilterSignature.current = registryFilterSignature;
+      setCurrentPage(1);
+    }
+  }, [registryFilterSignature]);
+
+  useEffect(() => {
+    if (!loading && currentPage > pages) setCurrentPage(pages);
+  }, [currentPage, loading, pages]);
 
   return (
     <div className="min-h-screen bg-slate-50 px-6 py-8 text-sm text-slate-700">
@@ -842,7 +1046,7 @@ export default function RegistryManagement() {
               <span className="rounded-full bg-white/10 text-indigo-100 border border-white/10 px-4 py-2 font-semibold backdrop-blur-sm">{payload?.role || 'Guest'}</span>
               <button onClick={() => setActiveTab('lectors')} className={`px-4 py-2 rounded-2xl ${activeTab === 'lectors' ? 'bg-white text-slate-900 shadow-sm' : 'bg-white/5 text-slate-200 border border-white/10 hover:bg-white/10'}`}>Lector Roster</button>
               <button onClick={() => setActiveTab('parishes')} className={`px-4 py-2 rounded-2xl ${activeTab === 'parishes' ? 'bg-white text-slate-900 shadow-sm' : 'bg-white/5 text-slate-200 border border-white/10 hover:bg-white/10'}`}>Parish Directory</button>
-              {canEditRegistry && (
+              {['superadmin', 'executive'].includes(userRole) && (
                 <button onClick={() => window.location.href = '/admin/audit'} className="px-3 py-2 rounded-2xl bg-white/10 text-white/80 border border-white/10">Audit Logs</button>
               )}
             </div>
@@ -850,8 +1054,42 @@ export default function RegistryManagement() {
         </div>
 
         {alertMessage && (
-          <div className={`rounded-2xl p-4 mb-5 ${alertMessage.type === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-rose-50 text-rose-700 border border-rose-100'}`}>
-            {alertMessage.text}
+          <div
+            role={alertMessage.type === 'error' ? 'alert' : 'status'}
+            aria-live={alertMessage.type === 'error' ? 'assertive' : 'polite'}
+            className={`fixed right-4 top-4 z-[60] flex w-[calc(100%-2rem)] max-w-md items-start gap-3 rounded-2xl border p-4 shadow-xl ${
+              alertMessage.type === 'success'
+                ? 'border-emerald-200 bg-white text-emerald-800'
+                : alertMessage.type === 'info'
+                  ? 'border-indigo-200 bg-white text-indigo-800'
+                  : 'border-rose-200 bg-white text-rose-800'
+            }`}
+          >
+            <span className={`mt-0.5 h-2.5 w-2.5 shrink-0 rounded-full ${
+              alertMessage.type === 'success' ? 'bg-emerald-500' : alertMessage.type === 'info' ? 'bg-indigo-500' : 'bg-rose-500'
+            }`} aria-hidden="true" />
+            <p className="flex-1 text-sm font-medium">{alertMessage.text}</p>
+            <button
+              type="button"
+              onClick={() => setAlertMessage(null)}
+              aria-label="Dismiss notification"
+              className="rounded-lg px-1 text-lg leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+            >
+              &times;
+            </button>
+          </div>
+        )}
+
+        {upcomingBirthdays.length > 0 && (
+          <div className="mb-6 rounded-3xl border border-pink-100 bg-pink-50 p-5">
+            <p className="text-[10px] uppercase tracking-[0.2em] font-bold text-pink-600">Upcoming birthdays</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {upcomingBirthdays.slice(0, 8).map((birthday, index) => (
+                <span key={`${birthday.name}-${index}`} className="rounded-full border border-pink-200 bg-white px-3 py-2 text-xs font-semibold text-pink-700">
+                  {birthday.name} - {birthday.month}/{birthday.day} ({birthday.daysUntil === 0 ? 'today' : `${birthday.daysUntil} days`})
+                </span>
+              ))}
+            </div>
           </div>
         )}
 
@@ -903,8 +1141,15 @@ export default function RegistryManagement() {
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <button onClick={exportCsv} className="rounded-2xl bg-slate-100 text-slate-700 px-4 py-2 text-xs font-semibold hover:bg-slate-200">Export CSV</button>
-                  {canEditRegistry ? (
+                  {canExportRegistry && (
+                    <>
+                      <button onClick={exportPdf} className="rounded-2xl bg-slate-100 text-slate-700 px-4 py-2 text-xs font-semibold hover:bg-slate-200">Export PDF</button>
+                      <button onClick={exportExcel} className="rounded-2xl bg-slate-100 text-slate-700 px-4 py-2 text-xs font-semibold hover:bg-slate-200">Export Excel</button>
+                      <button onClick={exportCsv} className="rounded-2xl bg-slate-100 text-slate-700 px-4 py-2 text-xs font-semibold hover:bg-slate-200">Export CSV</button>
+                      <button onClick={() => window.print()} className="rounded-2xl bg-slate-100 text-slate-700 px-4 py-2 text-xs font-semibold hover:bg-slate-200">Print</button>
+                    </>
+                  )}
+                  {(activeTab === 'lectors' ? canAddRegistry : ['superadmin', 'executive'].includes(userRole)) ? (
                     activeTab === 'lectors' ? (
                       <button onClick={() => openLectorDrawer()} className="rounded-2xl bg-indigo-600 text-white px-4 py-2 text-xs font-semibold">Add New Lector</button>
                     ) : (
@@ -1035,7 +1280,7 @@ export default function RegistryManagement() {
                   >
                     Export selected
                   </button>
-                    {activeTab === 'lectors' && canEditRegistry && (
+                    {activeTab === 'lectors' && canSuspendRegistry && (
                       <>
                         <button
                           type="button"
@@ -1058,13 +1303,15 @@ export default function RegistryManagement() {
                         >
                           Bulk Unsuspend Selected
                         </button>
-                        <button
-                          type="button"
-                          onClick={unsuspendAllSuspended}
-                          className="rounded-xl bg-rose-600 px-3 py-2 text-[11px] font-semibold text-white hover:bg-rose-700"
-                        >
-                          Unsuspend All Suspended
-                        </button>
+                        {userRole === 'superadmin' && (
+                          <button
+                            type="button"
+                            onClick={unsuspendAllSuspended}
+                            className="rounded-xl bg-rose-600 px-3 py-2 text-[11px] font-semibold text-white hover:bg-rose-700"
+                          >
+                            Unsuspend All Suspended
+                          </button>
+                        )}
                       </>
                     )}
                 </div>
@@ -1073,7 +1320,7 @@ export default function RegistryManagement() {
 
             {activeTab === 'lectors' ? (
               <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-                <div className="overflow-x-auto">
+                <div className="hidden overflow-x-auto md:block">
                   <table className="min-w-full text-left text-sm">
                     <thead className="bg-slate-100 text-slate-500 uppercase text-[10px] tracking-[0.2em]">
                       <tr>
@@ -1100,7 +1347,11 @@ export default function RegistryManagement() {
                             <input type="checkbox" checked={selectedRows.includes(member._id)} onChange={() => toggleRowSelection(member._id)} className="h-4 w-4 rounded border-slate-300" />
                           </td>
                           <td className="px-4 py-4">
-                            <div className="flex items-center gap-3">
+                            <button
+                              type="button"
+                              onClick={() => navigate(registryUrl(`/registry/lectors/${member._id}`))}
+                              className="flex items-center gap-3 text-left"
+                            >
                               <div className="flex h-9 w-9 items-center justify-center rounded-full bg-indigo-100 text-xs font-bold text-indigo-700">
                                 {(member.firstName || 'A').charAt(0).toUpperCase()}{(member.lastName || 'A').charAt(0).toUpperCase()}
                               </div>
@@ -1108,7 +1359,7 @@ export default function RegistryManagement() {
                                 <strong>{member.firstName} {member.lastName}</strong>
                                 <div className="text-[11px] text-slate-500">{member.phone}</div>
                               </div>
-                            </div>
+                            </button>
                           </td>
                           <td className="px-4 py-4">
                             {(member.parish && member.parish.name) || member.parishName || 'Unassigned'}
@@ -1132,8 +1383,9 @@ export default function RegistryManagement() {
                                   {menuOpenId === member._id && (
                                     <div className="absolute right-0 top-11 z-20 w-40 rounded-2xl border border-slate-200 bg-white shadow-lg p-2">
                                       <button onClick={() => { openLectorDrawer(member); setMenuOpenId(null); }} className="block w-full text-left rounded-xl px-3 py-2 text-[11px] font-semibold text-slate-700 hover:bg-slate-100">Edit Details</button>
-                                      <button onClick={() => { setAlertMessage({ type: 'success', text: `${member.firstName} ${member.lastName} has been marked for parish transfer.` }); setMenuOpenId(null); }} className="block w-full text-left rounded-xl px-3 py-2 text-[11px] font-semibold text-slate-700 hover:bg-slate-100">Transfer Parish</button>
-                                      <button onClick={() => { handleDeleteMember(member._id); setMenuOpenId(null); }} className="block w-full text-left rounded-xl px-3 py-2 text-[11px] font-semibold text-rose-700 hover:bg-rose-50">Archive</button>
+                                      {canDeleteRegistry && (
+                                        <button onClick={() => { handleDeleteMember(member._id); setMenuOpenId(null); }} className="block w-full text-left rounded-xl px-3 py-2 text-[11px] font-semibold text-rose-700 hover:bg-rose-50">Archive</button>
+                                      )}
                                     </div>
                                   )}
                                 </div>
@@ -1149,6 +1401,105 @@ export default function RegistryManagement() {
                       )}
                     </tbody>
                   </table>
+                </div>
+                <div className="divide-y divide-slate-100 md:hidden">
+                  <div className="flex items-center gap-3 bg-slate-50 px-4 py-3 text-xs font-semibold text-slate-600">
+                    <input
+                      type="checkbox"
+                      aria-label="Select all filtered lectors"
+                      checked={filteredMembers.length > 0 && filteredMembers.every(member => selectedRows.includes(member._id))}
+                      onChange={() => {
+                        if (filteredMembers.every(member => selectedRows.includes(member._id))) {
+                          setSelectedRows(prev => prev.filter(id => !filteredMembers.some(member => member._id === id)));
+                        } else {
+                          setSelectedRows(prev => Array.from(new Set([...prev, ...filteredMembers.map(member => member._id)])));
+                        }
+                      }}
+                      className="h-4 w-4 rounded border-slate-300"
+                    />
+                    Select all filtered lectors
+                  </div>
+                  {displayRows.map((member) => (
+                    <article key={member._id} className="p-4">
+                      <div className="flex items-start gap-3">
+                        <input
+                          type="checkbox"
+                          aria-label={`Select ${member.firstName} ${member.lastName}`}
+                          checked={selectedRows.includes(member._id)}
+                          onChange={() => toggleRowSelection(member._id)}
+                          className="mt-1 h-4 w-4 shrink-0 rounded border-slate-300"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex min-w-0 items-center gap-3">
+                              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-xs font-bold text-indigo-700">
+                                {(member.firstName || 'A').charAt(0).toUpperCase()}{(member.lastName || 'A').charAt(0).toUpperCase()}
+                              </div>
+                              <div className="min-w-0">
+                                <button
+                                  type="button"
+                                  onClick={() => navigate(registryUrl(`/registry/lectors/${member._id}`))}
+                                  className="block max-w-full truncate text-left font-bold text-slate-900 hover:text-indigo-700"
+                                >
+                                  {member.firstName} {member.lastName}
+                                </button>
+                                <p className="mt-0.5 truncate text-xs text-slate-500">{member.phone || 'No phone recorded'}</p>
+                              </div>
+                            </div>
+                            <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.1em] ${(member.status || 'Active') === 'Active' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                              {member.status || 'Active'}
+                            </span>
+                          </div>
+
+                          <div className="mt-4 grid grid-cols-2 gap-3 rounded-xl bg-slate-50 p-3">
+                            <div className="min-w-0">
+                              <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Parish</p>
+                              <p className="mt-1 truncate text-xs font-semibold text-slate-700">
+                                {(member.parish && member.parish.name) || member.parishName || 'Unassigned'}
+                              </p>
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Role</p>
+                              <p className="mt-1 truncate text-xs font-semibold text-slate-700">{member.roleInParish || 'Active Member'}</p>
+                            </div>
+                          </div>
+
+                          <div className="mt-3 flex flex-wrap items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => navigate(registryUrl(`/registry/lectors/${member._id}`))}
+                              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                            >
+                              View details
+                            </button>
+                            {canEditRegistry ? (
+                              <button
+                                type="button"
+                                onClick={() => openLectorDrawer(member)}
+                                className="rounded-xl bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-200"
+                              >
+                                Edit
+                              </button>
+                            ) : (
+                              <span className="px-1 text-xs italic text-slate-400">Read only</span>
+                            )}
+                            {canDeleteRegistry && (
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteMember(member._id)}
+                                className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-100"
+                              >
+                                Archive
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </article>
+                  ))}
+                  {!filteredMembers.length && (
+                    <p className="px-4 py-8 text-center text-sm text-slate-500">No members found for the current filters.</p>
+                  )}
                 </div>
                 <div className="p-4 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
                   <p className="text-[11px] text-slate-500">Showing {displayRows.length} of {totalMembersCount ?? filteredMembers.length} records</p>
@@ -1175,7 +1526,7 @@ export default function RegistryManagement() {
               </div>
             ) : (
               <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-                <div className="overflow-x-auto">
+                <div className="hidden overflow-x-auto md:block">
                   <table className="min-w-full text-left text-sm">
                     <thead className="bg-slate-100 text-slate-500 uppercase text-[10px] tracking-[0.2em] sticky top-0 z-10">
                       <tr>
@@ -1202,13 +1553,21 @@ export default function RegistryManagement() {
                             <td className="px-4 py-4">
                               <input type="checkbox" checked={selectedRows.includes(parish._id)} onChange={() => toggleRowSelection(parish._id)} className="h-4 w-4 rounded border-slate-300" />
                             </td>
-                            <td className="px-4 py-4 font-semibold text-slate-900">{parish.name}</td>
+                            <td className="px-4 py-4 font-semibold text-slate-900">
+                              <button
+                                type="button"
+                                onClick={() => navigate(registryUrl(`/registry/parishes/${parish._id}`))}
+                                className="text-left font-semibold text-slate-900 hover:text-indigo-700"
+                              >
+                                {parish.name}
+                              </button>
+                            </td>
                             <td className="px-4 py-4"><span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-600">{parish.zone}</span></td>
                             <td className="px-4 py-4"><span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-bold text-emerald-700">{memberCount}</span></td>
                             <td className="px-4 py-4 relative">
-                              {canEditRegistry ? (
+                              {['superadmin', 'executive'].includes(userRole) ? (
                                 <div className="flex items-center justify-end gap-2">
-                                  <button onClick={() => { setEditingParish(parish); setSelectedParishId(parish._id); handleSelectParish(parish._id); }} className="rounded-2xl bg-slate-100 px-3 py-2 text-[11px] font-semibold text-slate-700 hover:bg-slate-200">Details</button>
+                                  <button onClick={() => navigate(registryUrl(`/registry/parishes/${parish._id}`))} className="rounded-2xl bg-slate-100 px-3 py-2 text-[11px] font-semibold text-slate-700 hover:bg-slate-200">Details</button>
                                   <div className="relative">
                                     <button onClick={() => setMenuOpenId(menuOpenId === parish._id ? null : parish._id)} className="rounded-2xl bg-slate-100 px-2.5 py-2 text-slate-700 hover:bg-slate-200">⋮</button>
                                     {menuOpenId === parish._id && (
@@ -1222,7 +1581,7 @@ export default function RegistryManagement() {
                                 </div>
                               ) : (
                                 <div className="flex items-center justify-end">
-                                  <button onClick={() => { setEditingParish(parish); setSelectedParishId(parish._id); handleSelectParish(parish._id); }} className="rounded-2xl bg-slate-100 px-3 py-2 text-[11px] font-semibold text-slate-700 hover:bg-slate-200">Details</button>
+                                  <button onClick={() => navigate(registryUrl(`/registry/parishes/${parish._id}`))} className="rounded-2xl bg-slate-100 px-3 py-2 text-[11px] font-semibold text-slate-700 hover:bg-slate-200">Details</button>
                                 </div>
                               )}
                             </td>
@@ -1234,6 +1593,104 @@ export default function RegistryManagement() {
                       )}
                     </tbody>
                   </table>
+                </div>
+                <div className="divide-y divide-slate-100 md:hidden">
+                  <div className="flex items-center gap-3 bg-slate-50 px-4 py-3 text-xs font-semibold text-slate-600">
+                    <input
+                      type="checkbox"
+                      aria-label="Select all filtered parishes"
+                      checked={filteredParishes.length > 0 && filteredParishes.every(parish => selectedRows.includes(parish._id))}
+                      onChange={() => {
+                        if (filteredParishes.every(parish => selectedRows.includes(parish._id))) {
+                          setSelectedRows(prev => prev.filter(id => !filteredParishes.some(parish => parish._id === id)));
+                        } else {
+                          setSelectedRows(prev => Array.from(new Set([...prev, ...filteredParishes.map(parish => parish._id)])));
+                        }
+                      }}
+                      className="h-4 w-4 rounded border-slate-300"
+                    />
+                    Select all filtered parishes
+                  </div>
+                  {displayRows.map((parish) => {
+                    const memberCount = parish.lectorCount || 0;
+                    const isActive = memberCount > 0;
+                    return (
+                      <article key={parish._id} className="p-4">
+                        <div className="flex items-start gap-3">
+                          <input
+                            type="checkbox"
+                            aria-label={`Select ${parish.name}`}
+                            checked={selectedRows.includes(parish._id)}
+                            onChange={() => toggleRowSelection(parish._id)}
+                            className="mt-1 h-4 w-4 shrink-0 rounded border-slate-300"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-start justify-between gap-3">
+                              <button
+                                type="button"
+                                onClick={() => navigate(registryUrl(`/registry/parishes/${parish._id}`))}
+                                className="text-left font-bold text-slate-900 hover:text-indigo-700"
+                              >
+                                {parish.name}
+                              </button>
+                              <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.1em] ${isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                                {isActive ? 'Active' : 'Inactive'}
+                              </span>
+                            </div>
+
+                            <div className="mt-4 grid grid-cols-2 gap-3 rounded-xl bg-slate-50 p-3">
+                              <div>
+                                <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Zone</p>
+                                <p className="mt-1 text-xs font-semibold text-slate-700">{parish.zone || 'Not set'}</p>
+                              </div>
+                              <div>
+                                <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Active members</p>
+                                <p className="mt-1 text-xs font-semibold text-slate-700">{memberCount}</p>
+                              </div>
+                            </div>
+
+                            <div className="mt-3 flex flex-wrap items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => navigate(registryUrl(`/registry/parishes/${parish._id}`))}
+                                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                              >
+                                View details
+                              </button>
+                              {['superadmin', 'executive'].includes(userRole) && (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => openParishDrawer(parish)}
+                                    className="rounded-xl bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-200"
+                                  >
+                                    Edit
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setAlertMessage({ type: 'success', text: `${parish.name} summary opened.` })}
+                                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                                  >
+                                    Open summary
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteParish(parish._id)}
+                                    className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-100"
+                                  >
+                                    Remove
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </article>
+                    );
+                  })}
+                  {!filteredParishes.length && (
+                    <p className="px-4 py-8 text-center text-sm text-slate-500">No parishes found.</p>
+                  )}
                 </div>
                 <div className="p-4 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
                   <p className="text-[11px] text-slate-500">Showing {displayRows.length} of {filteredParishes.length} records</p>
@@ -1463,7 +1920,7 @@ export default function RegistryManagement() {
                         <p><strong>Role:</strong> {selectedMember.roleInParish || 'Member'}</p>
                         <p><strong>Parish:</strong> {(selectedMember.parish && selectedMember.parish.name) || selectedMember.parishName || 'Unassigned'}</p>
                         <p><strong>Gender:</strong> {selectedMember.gender || 'N/A'}</p>
-                        <p><strong>Age Bracket:</strong> {selectedMember.ageBracket || 'N/A'}</p>
+                        <p><strong>Date of Birth:</strong> {selectedMember.dateOfBirth ? new Date(selectedMember.dateOfBirth).toLocaleDateString() : 'N/A'}</p>
                         <p><strong>Year Commissioned:</strong> {selectedMember.yearCommissioned || 'N/A'}</p>
                       </div>
                       <div className="mt-4 flex justify-end">
@@ -1544,7 +2001,7 @@ export default function RegistryManagement() {
                 <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500">Registry action</p>
                 <h2 className="text-2xl font-black text-slate-900 mt-1">{drawerType === 'lector' ? (editingMember ? 'Edit Lector' : 'Add New Lector') : (editingParish && editingParish._id ? 'Edit Parish' : 'Add New Parish')}</h2>
               </div>
-              <button onClick={closeDrawer} className="rounded-full bg-slate-100 px-3 py-2 text-slate-500 hover:bg-slate-200">✕</button>
+              <button onClick={closeDrawer} disabled={isSavingRegistry} className="rounded-full bg-slate-100 px-3 py-2 text-slate-500 hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-50">✕</button>
             </div>
 
             {drawerType === 'lector' ? (
@@ -1560,6 +2017,16 @@ export default function RegistryManagement() {
                 <div>
                   <label className="text-slate-500 block mb-1">Phone</label>
                   <input type="tel" value={formState.phone} onChange={e => setFormState(prev => ({ ...prev, phone: e.target.value }))} className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3" />
+                </div>
+                <div>
+                  <label className="text-slate-500 block mb-1">Date of Birth</label>
+                  <input
+                    type="date"
+                    max={new Date().toISOString().split('T')[0]}
+                    value={formState.dateOfBirth || ''}
+                    onChange={e => setFormState(prev => ({ ...prev, dateOfBirth: e.target.value }))}
+                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3"
+                  />
                 </div>
                 <div>
                   <label className="text-slate-500 block mb-1">Parish</label>
@@ -1591,8 +2058,8 @@ export default function RegistryManagement() {
                   <input type="number" value={formState.yearCommissioned} onChange={e => setFormState(prev => ({ ...prev, yearCommissioned: e.target.value }))} className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3" />
                 </div>
                 <div className="flex gap-3 pt-2">
-                  <button type="button" onClick={closeDrawer} className="flex-1 rounded-2xl bg-slate-100 text-slate-700 py-3 font-semibold">Cancel</button>
-                  <button type="submit" className="flex-1 rounded-2xl bg-indigo-600 text-white py-3 font-semibold">Save</button>
+                  <button type="button" onClick={closeDrawer} disabled={isSavingRegistry} className="flex-1 rounded-2xl bg-slate-100 text-slate-700 py-3 font-semibold disabled:cursor-not-allowed disabled:opacity-50">Cancel</button>
+                  <button type="submit" disabled={isSavingRegistry} className="flex-1 rounded-2xl bg-indigo-600 text-white py-3 font-semibold disabled:cursor-wait disabled:opacity-60">{isSavingRegistry ? 'Saving...' : 'Save'}</button>
                 </div>
               </form>
             ) : (
@@ -1610,11 +2077,71 @@ export default function RegistryManagement() {
                   </select>
                 </div>
                 <div className="flex gap-3 pt-2">
-                  <button type="button" onClick={closeDrawer} className="flex-1 rounded-2xl bg-slate-100 text-slate-700 py-3 font-semibold">Cancel</button>
-                  <button type="submit" className="flex-1 rounded-2xl bg-indigo-600 text-white py-3 font-semibold">{editingParish && editingParish._id ? 'Save Changes' : 'Add Parish'}</button>
+                  <button type="button" onClick={closeDrawer} disabled={isSavingRegistry} className="flex-1 rounded-2xl bg-slate-100 text-slate-700 py-3 font-semibold disabled:cursor-not-allowed disabled:opacity-50">Cancel</button>
+                  <button type="submit" disabled={isSavingRegistry} className="flex-1 rounded-2xl bg-indigo-600 text-white py-3 font-semibold disabled:cursor-wait disabled:opacity-60">
+                    {isSavingRegistry ? 'Saving...' : editingParish && editingParish._id ? 'Save Changes' : 'Add Parish'}
+                  </button>
                 </div>
               </form>
             )}
+          </div>
+        </div>
+      )}
+
+      {confirmationDialog && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm">
+          <div
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="registry-confirmation-title"
+            aria-describedby="registry-confirmation-message"
+            className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl"
+          >
+            <div className={`flex h-11 w-11 items-center justify-center rounded-2xl ${
+              confirmationDialog.confirmLabel?.toLowerCase().includes('unsuspend') ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'
+            }`} aria-hidden="true">
+              !
+            </div>
+            <h2 id="registry-confirmation-title" className="mt-4 text-lg font-bold text-slate-900">{confirmationDialog.title}</h2>
+            <p id="registry-confirmation-message" className="mt-2 text-sm leading-6 text-slate-600">{confirmationDialog.message}</p>
+            {confirmationDialog.requiredText && (
+              <div className="mt-4">
+                <label htmlFor="registry-confirmation-text" className="block text-xs font-semibold text-slate-700">
+                  Type <span className="font-bold">{confirmationDialog.requiredText}</span> to continue
+                </label>
+                <input
+                  id="registry-confirmation-text"
+                  type="text"
+                  value={confirmationText}
+                  onChange={event => setConfirmationText(event.target.value)}
+                  disabled={isConfirmingAction}
+                  autoComplete="off"
+                  className="mt-2 w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100 disabled:bg-slate-100"
+                />
+              </div>
+            )}
+            <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={closeConfirmation}
+                disabled={isConfirmingAction}
+                className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmPendingAction}
+                disabled={isConfirmingAction || Boolean(confirmationDialog.requiredText && confirmationText !== confirmationDialog.requiredText)}
+                className={`rounded-xl px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50 ${
+                  confirmationDialog.confirmLabel?.toLowerCase().includes('unsuspend')
+                    ? 'bg-amber-600 hover:bg-amber-700'
+                    : 'bg-rose-600 hover:bg-rose-700'
+                }`}
+              >
+                {isConfirmingAction ? 'Processing...' : confirmationDialog.confirmLabel}
+              </button>
+            </div>
           </div>
         </div>
       )}

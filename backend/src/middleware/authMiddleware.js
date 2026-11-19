@@ -22,6 +22,9 @@ export const protect = async (req, res, next) => {
     if (!req.user) {
       return res.status(401).json({ message: 'User no longer exists' });
     }
+    if (req.user.status !== 'approved') {
+      return res.status(403).json({ message: 'Account approval is required.' });
+    }
 
     req.user.role = normalizeUserRole(req.user.role);
     next();
@@ -69,4 +72,14 @@ export const authorizeApproval = (req, res, next) => {
   }
 
   return res.status(403).json({ message: 'Not authorized to manage user access.' });
+};
+
+export const requirePermission = (permission) => (req, res, next) => {
+  const role = normalizeUserRole(req.user?.role);
+  if (role === 'superadmin' || role === 'executive') return next();
+  if (role !== 'president') return res.status(403).json({ message: 'Not authorized.' });
+  if (!req.user.permissions?.[permission]) {
+    return res.status(403).json({ message: `Permission "${permission}" was not granted.` });
+  }
+  next();
 };

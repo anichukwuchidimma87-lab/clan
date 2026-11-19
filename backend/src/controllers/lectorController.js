@@ -82,9 +82,15 @@ export const bulkUploadParishes = async (req, res) => {
 // PUBLIC SUBMISSION POST HANDLER
 export const publicCheckIn = async (req, res) => {
   try {
-    const { firstName, lastName, phone, gender, ageBracket, yearCommissioned, employmentStatus, deanery, parishName, parishId, roleInParish } = req.body;
+    const { firstName, lastName, phone, gender, ageBracket, dateOfBirth, yearCommissioned, employmentStatus, deanery, parishName, parishId, roleInParish } = req.body;
 
     const parsedYear = Number(yearCommissioned);
+    if (dateOfBirth) {
+      const parsedDate = new Date(`${dateOfBirth}T00:00:00`);
+      if (Number.isNaN(parsedDate.getTime()) || parsedDate > new Date()) {
+        return res.status(400).json({ success: false, message: 'Enter a valid date of birth.' });
+      }
+    }
     const yearCommissionedValue = (!yearCommissioned || String(yearCommissioned).trim() === '' || String(yearCommissioned).toLowerCase().includes('not commissioned') || Number.isNaN(parsedYear))
       ? null
       : parsedYear;
@@ -125,6 +131,7 @@ export const publicCheckIn = async (req, res) => {
       phone,
       gender,
       ageBracket,
+      dateOfBirth: dateOfBirth ? new Date(`${dateOfBirth}T00:00:00`) : null,
       yearCommissioned: yearCommissionedValue,
       employmentStatus,
       deanery: 'Benin', // Hardlock to Benin deanery profiles
@@ -134,6 +141,102 @@ export const publicCheckIn = async (req, res) => {
     });
 
     res.status(201).json({ success: true, data: newLector });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const addLector = async (req, res) => {
+  try {
+    const { role, parish } = req.user;
+    const { firstName, lastName, phone, gender, dateOfBirth, yearCommissioned, employmentStatus, parishId, roleInParish } = req.body;
+
+    if (role === 'president' && !req.user.permissions?.add) {
+      return res.status(403).json({ success: false, message: 'Add permission was not granted.' });
+    }
+    if (!firstName?.trim() || !lastName?.trim() || !parishId) {
+      return res.status(400).json({ success: false, message: 'First name, last name and parish are required.' });
+    }
+
+    const parishDoc = await Parish.findById(parishId);
+    if (!parishDoc) {
+      return res.status(400).json({ success: false, message: 'Selected parish is invalid.' });
+    }
+    if (role === 'president' && parishDoc.name !== parish) {
+      return res.status(403).json({ success: false, message: 'Presidents cannot add lectors outside their parish.' });
+    }
+
+    if (dateOfBirth) {
+      const parsedDate = new Date(`${dateOfBirth}T00:00:00`);
+      if (Number.isNaN(parsedDate.getTime()) || parsedDate > new Date()) {
+        return res.status(400).json({ success: false, message: 'Enter a valid date of birth.' });
+      }
+    }
+
+    const duplicate = await Lector.findOne({
+      firstName: firstName.trim(),
+      lastName: lastName.trim(),
+      parish: parishDoc._id
+    });
+    if (duplicate) {
+      return res.status(400).json({ success: false, message: 'This lector is already registered in the selected parish.' });
+    }
+
+    const parsedYear = Number(yearCommissioned);
+    const newLector = await Lector.create({
+      firstName: firstName.trim(),
+      lastName: lastName.trim(),
+      phone,
+      gender,
+      dateOfBirth: dateOfBirth ? new Date(`${dateOfBirth}T00:00:00`) : null,
+      yearCommissioned: !Number.isNaN(parsedYear) && parsedYear > 0 ? parsedYear : null,
+      employmentStatus,
+      deanery: 'Benin',
+      parish: parishDoc._id,
+      parishName: parishDoc.name,
+      roleInParish: roleInParish || 'Active Member'
+    });
+
+    res.status(201).json({ success: true, data: newLector });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const getUpcomingBirthdays = async (req, res) => {
+  try {
+    const { role, parish } = req.user;
+    if (!['superadmin', 'executive', 'president'].includes(role)) {
+      return res.status(403).json({ success: false, message: 'Not authorized to view birthdays.' });
+    }
+
+    const days = Math.min(366, Math.max(1, parseInt(req.query.days, 10) || 30));
+    const filter = role === 'president' ? { parishName: parish } : {};
+    const lectors = await Lector.find({
+      ...filter,
+      dateOfBirth: { $ne: null }
+    }).select('firstName lastName parishName dateOfBirth');
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const year = today.getFullYear();
+    const birthdays = lectors.map((lector) => {
+      const dob = new Date(lector.dateOfBirth);
+      let occurrence = new Date(year, dob.getMonth(), dob.getDate());
+      if (occurrence < today) occurrence = new Date(year + 1, dob.getMonth(), dob.getDate());
+      const distance = Math.ceil((occurrence - today) / 86400000);
+      return {
+        name: `${lector.firstName} ${lector.lastName}`,
+        parishName: lector.parishName,
+        month: dob.getMonth() + 1,
+        day: dob.getDate(),
+        daysUntil: distance
+      };
+    })
+      .filter((item) => item.daysUntil <= days)
+      .sort((a, b) => a.daysUntil - b.daysUntil);
+
+    res.status(200).json({ success: true, data: birthdays });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -266,6 +369,30 @@ export const getRegistryData = async (req, res) => {
       });
     }
 
+    if (role === 'president') {
+      if (!req.user.permissions?.view) {
+        return res.status(403).json({ success: false, message: 'View permission was not granted.' });
+      }
+    }
+    if (role === 'president') {
+      const ownParishLectors = await Lector.find({
+        parishName: parish,
+        deanery: 'Benin',
+        ...buildSearchFilter(),
+        ...(status && status !== 'all' ? { status } : {})
+      }).populate('parish', 'name zone');
+      for (const lector of ownParishLectors) {
+        lector.dateOfBirth = undefined;
+      }
+
+      return res.status(200).json({
+        success: true,
+        scope: 'ownParish',
+        ownParish: ownParishLectors,
+        otherExecutives: []
+      });
+    }
+
     if (role === 'member') {
       const sharedSearch = buildSearchFilter();
       const ownParishFilter = {
@@ -306,12 +433,32 @@ export const updateLector = async (req, res) => {
   try {
     const { id } = req.params;
     const { role, parish } = req.user;
+
     const { parishId, parishName, ...updateFields } = req.body;
+
+    if (role === 'member') {
+      return res.status(403).json({ message: 'Registry update permission was not granted.' });
+    }
+    if (role === 'president') {
+      if (Object.prototype.hasOwnProperty.call(updateFields, 'status') && !req.user.permissions?.suspend) {
+        return res.status(403).json({ message: 'Suspend permission was not granted.' });
+      }
+      if (!Object.prototype.hasOwnProperty.call(updateFields, 'status') && !req.user.permissions?.update) {
+        return res.status(403).json({ message: 'Update permission was not granted.' });
+      }
+      if (Object.prototype.hasOwnProperty.call(updateFields, 'dateOfBirth') && updateFields.dateOfBirth) {
+        const parsedDob = new Date(`${updateFields.dateOfBirth}T00:00:00`);
+        if (Number.isNaN(parsedDob.getTime()) || parsedDob > new Date()) {
+          return res.status(400).json({ message: 'Enter a valid date of birth.' });
+        }
+        updateFields.dateOfBirth = parsedDob;
+      }
+    }
 
     const target = await Lector.findById(id);
     if (!target) return res.status(404).json({ message: "File missing." });
 
-    if (role === 'member' && target.parishName !== parish) {
+    if (['member', 'president'].includes(role) && target.parishName !== parish) {
       return res.status(403).json({ message: "Unauthorized local perimeter control breach." });
     }
 
@@ -319,6 +466,9 @@ export const updateLector = async (req, res) => {
       const parishDoc = await Parish.findById(parishId);
       if (!parishDoc) {
         return res.status(400).json({ message: 'Invalid parish selection.' });
+      }
+      if (role === 'president' && parishDoc.name !== parish) {
+        return res.status(403).json({ message: 'Presidents cannot transfer lectors outside their parish.' });
       }
       updateFields.parish = parishDoc._id;
       updateFields.parishName = parishDoc.name;
@@ -344,10 +494,14 @@ export const deleteLector = async (req, res) => {
     const { id } = req.params;
     const { role, parish } = req.user;
 
+    if (role === 'president' && !req.user.permissions?.delete) {
+      return res.status(403).json({ success: false, message: 'Delete permission was not granted.' });
+    }
+
     const target = await Lector.findById(id);
     if (!target) return res.status(404).json({ message: "File missing." });
 
-    if (role === 'member' && target.parishName !== parish) {
+    if (['member', 'president'].includes(role) && target.parishName !== parish) {
       return res.status(403).json({ message: "Action barred." });
     }
 
@@ -362,7 +516,14 @@ export const deleteLector = async (req, res) => {
 export const bulkUnsuspend = async (req, res) => {
   try {
     const { ids, allSuspended } = req.body;
-    const { role } = req.user;
+    const { role, parish } = req.user;
+
+    if (role === 'member') {
+      return res.status(403).json({ success: false, message: 'Suspend permission was not granted.' });
+    }
+    if (role === 'president' && !req.user.permissions?.suspend) {
+      return res.status(403).json({ success: false, message: 'Suspend permission was not granted.' });
+    }
 
     // If requesting to unsuspend all suspended records, restrict to superadmin
     if (allSuspended) {
@@ -385,7 +546,8 @@ export const bulkUnsuspend = async (req, res) => {
     }
 
     const objectIds = ids.map(id => id);
-    const result = await Lector.updateMany({ _id: { $in: objectIds }, status: 'Suspended' }, { $set: { status: 'Active' } });
+    const scope = role === 'president' ? { parishName: parish } : {};
+    const result = await Lector.updateMany({ _id: { $in: objectIds }, status: 'Suspended', ...scope }, { $set: { status: 'Active' } });
     const modified = result.modifiedCount || result.nModified || 0;
     try {
       await AuditLog.create({ action: 'bulk-unsuspend', user: req.user?._id, userRole: role, affectedCount: modified, ids: objectIds, all: false, notes: 'Unsuspend selected via admin UI' });

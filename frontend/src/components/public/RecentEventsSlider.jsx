@@ -5,19 +5,23 @@ function RecentEventsSlider() {
   const [events, setEvents] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState(false);
+  const apiRoot = import.meta.env.VITE_API_URL || '';
 
   useEffect(() => {
     const fetchEvents = async () => {
       try {
         setLoading(true);
-        const response = await axios.get(`${import.meta.env.VITE_API_URL}/public/recent-events?limit=4`);
-        setEvents(response.data.data || []);
-        setError(null);
+        const response = await axios.get(`${apiRoot}/api/public/recent-events?limit=4`);
+        if (!response.data?.success || !Array.isArray(response.data.data)) {
+          throw new Error('Recent gallery response was not successful.');
+        }
+        setEvents(response.data.data);
+        setError(false);
       } catch (err) {
         console.error('Error fetching recent events:', err);
-        // Not a critical error - show placeholder
         setEvents([]);
+        setError(true);
       } finally {
         setLoading(false);
       }
@@ -72,8 +76,8 @@ function RecentEventsSlider() {
                   d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
                 />
               </svg>
-              <p className="text-gray-600 text-lg">Event photos coming soon</p>
-              <p className="text-gray-500 text-sm mt-2">Check back as we upload recent community moments</p>
+              <p className="text-gray-600 text-lg">{error ? 'Event gallery is temporarily unavailable' : 'Event photos coming soon'}</p>
+              <p className="text-gray-500 text-sm mt-2">{error ? 'Please check back later.' : 'Check back as we upload recent community moments.'}</p>
             </div>
           </div>
         </div>
@@ -109,6 +113,7 @@ function RecentEventsSlider() {
           {/* Navigation Buttons */}
           <button
             onClick={goToPrevious}
+            aria-label="Previous event photo"
             className="absolute left-4 top-1/2 transform -translate-y-1/2 bg-white bg-opacity-70 hover:bg-opacity-100 rounded-full p-2 transition z-10"
           >
             <svg className="w-6 h-6 text-gray-800" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -118,6 +123,7 @@ function RecentEventsSlider() {
 
           <button
             onClick={goToNext}
+            aria-label="Next event photo"
             className="absolute right-4 top-1/2 transform -translate-y-1/2 bg-white bg-opacity-70 hover:bg-opacity-100 rounded-full p-2 transition z-10"
           >
             <svg className="w-6 h-6 text-gray-800" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -145,6 +151,7 @@ function RecentEventsSlider() {
             <button
               key={index}
               onClick={() => setCurrentIndex(index)}
+              aria-label={`Show event photo ${index + 1}`}
               className={`flex-shrink-0 h-20 w-20 rounded overflow-hidden border-2 transition ${
                 index === currentIndex ? 'border-blue-600' : 'border-gray-300'
               }`}

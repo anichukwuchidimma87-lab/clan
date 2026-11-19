@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
-import { useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 
 const categoryNameMap = {
   executives: 'Executives',
   voalc: 'VOALC',
   seminar: 'Seminar',
   orphanage: 'Orphanage Visitation',
+  'orphanage-visitation': 'Orphanage Visitation',
   'event-chronicles': 'Event Chronicles',
 };
 
@@ -15,6 +16,7 @@ const paramToCategory = {
   voalc: 'voalc',
   seminar: 'seminar',
   orphanage: 'orphanage',
+  'orphanage-visitation': 'orphanage',
   'event-chronicles': 'events',
 };
 
@@ -23,17 +25,21 @@ function GalleryCategory() {
   const [galleryItems, setGalleryItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   const displayName = categoryNameMap[categoryParam] || 'Gallery';
   const category = paramToCategory[categoryParam];
 
   useEffect(() => {
     const apiRoot = import.meta.env.VITE_API_URL || '';
+    let active = true;
     const fetchGallery = async () => {
       if (!category) {
-        setError('Unknown gallery category.');
-        setGalleryItems([]);
-        setLoading(false);
+        if (active) {
+          setError('Unknown gallery category.');
+          setGalleryItems([]);
+          setLoading(false);
+        }
         return;
       }
 
@@ -41,36 +47,59 @@ function GalleryCategory() {
         setLoading(true);
         setError(null);
         const response = await axios.get(`${apiRoot}/api/public/gallery?category=${category}`);
-        setGalleryItems(response.data.data || []);
+        if (!response.data?.success || !Array.isArray(response.data.data)) {
+          throw new Error('Gallery response was not successful.');
+        }
+        if (active) setGalleryItems(response.data.data);
       } catch (fetchError) {
         console.error('Could not fetch gallery category items:', fetchError);
-        setError('Unable to load category images at the moment.');
-        setGalleryItems([]);
+        if (active) {
+          setError('Unable to load category images at the moment.');
+          setGalleryItems([]);
+        }
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
     };
 
     fetchGallery();
-  }, [category]);
+    return () => { active = false; };
+  }, [category, reloadKey]);
 
   return (
-    <main className="min-h-screen bg-gradient-to-b from-blue-50 to-white py-16">
+    <main className="min-h-screen bg-gradient-to-b from-blue-50 to-white py-10 sm:py-16">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="mb-10 rounded-[2rem] bg-white p-10 shadow-xl">
-          <h1 className="text-4xl font-bold text-slate-900">{displayName}</h1>
+        <div className="mb-8 rounded-[2rem] bg-white p-6 shadow-xl sm:mb-10 sm:p-10">
+          <Link to="/" className="inline-flex min-h-10 items-center rounded-lg text-sm font-semibold text-indigo-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2">
+            Back to home
+          </Link>
+          <h1 className="mt-4 text-3xl font-bold text-slate-900 sm:text-4xl">{displayName}</h1>
           <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-600">
             Explore the selected gallery category in a polished responsive layout.
           </p>
         </div>
 
         {loading ? (
-          <div className="rounded-3xl border border-slate-200 bg-white p-10 text-center shadow-sm">
+          <div role="status" aria-live="polite" className="rounded-3xl border border-slate-200 bg-white p-10 text-center shadow-sm">
             <p className="text-slate-500">Loading gallery images...</p>
           </div>
         ) : error ? (
-          <div className="rounded-3xl border border-rose-200 bg-rose-50 p-10 text-center shadow-sm">
-            <p className="text-rose-700">{error}</p>
+          <div className="rounded-3xl border border-rose-200 bg-rose-50 p-6 text-center shadow-sm sm:p-10">
+            <p role="alert" className="text-rose-700">{error}</p>
+            {category && (
+              <button
+                type="button"
+                onClick={() => setReloadKey((current) => current + 1)}
+                className="mt-5 inline-flex min-h-11 items-center justify-center rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-indigo-700 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-200"
+              >
+                Retry
+              </button>
+            )}
+          </div>
+        ) : galleryItems.length === 0 ? (
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 text-center shadow-sm sm:p-10">
+            <h2 className="font-bold text-slate-900">No images in this category yet</h2>
+            <p className="mt-2 text-sm text-slate-500">Community photos will appear here when they are shared.</p>
           </div>
         ) : (
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">

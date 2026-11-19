@@ -1,6 +1,6 @@
 import React from 'react';
 
-function FinancialSummary({ summary }) {
+function FinancialSummary({ summary, year }) {
   if (!summary) {
     return (
       <div className="rounded-3xl border border-slate-200 bg-white p-10 text-center shadow-sm">
@@ -52,7 +52,7 @@ function FinancialSummary({ summary }) {
       <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
         <h3 className="text-xl font-semibold text-slate-900">Public financial status</h3>
         <p className="mt-3 text-sm leading-7 text-slate-600">
-          This public-facing dashboard shows the parish compliance picture for the current financial year. It is designed to present the data clearly without showing sensitive ledger details.
+          This public-facing dashboard shows the parish compliance picture for financial year {year}. It is designed to present the data clearly without showing sensitive ledger details.
         </p>
       </div>
     </div>

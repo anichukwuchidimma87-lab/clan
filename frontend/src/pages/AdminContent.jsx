@@ -1,10 +1,18 @@
 import React, { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import generateCaption from '../utils/generateCaption';
+import ConfirmDialog from '../components/ConfirmDialog';
+import StatusNotice from '../components/StatusNotice';
 
 function EventManager() {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const [feedback, setFeedback] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [togglingId, setTogglingId] = useState(null);
+  const [pendingDelete, setPendingDelete] = useState(null);
+  const [deleting, setDeleting] = useState(false);
   const [editing, setEditing] = useState(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
@@ -38,12 +46,15 @@ function EventManager() {
 
   const load = async () => {
     setLoading(true);
+    setLoadError('');
     try {
       const res = await fetch(`${apiRoot}/api/events`, { headers: { Authorization: `Bearer ${token}` } });
       const json = await res.json();
-      if (json.success) setEvents(json.data || []);
+      if (!res.ok || !json.success) throw new Error(json.message || 'Unable to load events.');
+      setEvents(Array.isArray(json.data) ? json.data : []);
     } catch (err) {
       console.error('EventManager load error', err);
+      setLoadError(err.message || 'Unable to load events.');
     } finally {
       setLoading(false);
     }
@@ -55,6 +66,8 @@ function EventManager() {
 
   const save = async (e) => {
     e.preventDefault();
+    setSaving(true);
+    setFeedback(null);
     try {
       const method = editing ? 'PATCH' : 'POST';
       const url = editing ? `${apiRoot}/api/events/${editing._id}` : `${apiRoot}/api/events`;
@@ -64,16 +77,16 @@ function EventManager() {
         body: JSON.stringify(form),
       });
       const json = await res.json();
-      if (json.success) {
-        setForm({ title: '', description: '', date: '', location: '', coverImage: '' });
-        setEditing(null);
-        load();
-      } else {
-        alert(json.message || 'Save failed');
-      }
+      if (!res.ok || !json.success) throw new Error(json.message || 'Unable to save the event.');
+      setForm({ title: '', description: '', date: '', location: '', coverImage: '' });
+      setEditing(null);
+      setFeedback({ type: 'success', text: editing ? 'Event changes saved.' : 'Event created.' });
+      await load();
     } catch (err) {
       console.error(err);
-      alert('Save error');
+      setFeedback({ type: 'error', text: err.message || 'Unable to save the event.' });
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -89,23 +102,42 @@ function EventManager() {
   };
 
   const toggle = async (id) => {
+    setTogglingId(id);
+    setFeedback(null);
     try {
       const res = await fetch(`${apiRoot}/api/events/${id}/toggle`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
       const json = await res.json();
-      if (json.success) setEvents((prev) => prev.map((p) => (p._id === id ? json.data : p)));
+      if (!res.ok || !json.success) throw new Error(json.message || 'Unable to update event status.');
+      setEvents((prev) => prev.map((p) => (p._id === id ? json.data : p)));
+      setFeedback({ type: 'success', text: 'Event status updated.' });
     } catch (err) {
       console.error('Toggle error', err);
+      setFeedback({ type: 'error', text: err.message || 'Unable to update event status.' });
+    } finally {
+      setTogglingId(null);
     }
   };
 
   const del = async (id) => {
-    if (!window.confirm('Delete this event?')) return;
+    setPendingDelete(events.find((event) => event._id === id) || { _id: id });
+  };
+
+  const confirmDelete = async () => {
+    if (!pendingDelete || deleting) return;
+    setDeleting(true);
+    setFeedback(null);
     try {
-      const res = await fetch(`${apiRoot}/api/events/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+      const res = await fetch(`${apiRoot}/api/events/${pendingDelete._id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
       const json = await res.json();
-      if (json.success) setEvents((prev) => prev.filter((p) => p._id !== id));
+      if (!res.ok || !json.success) throw new Error(json.message || 'Unable to delete the event.');
+      setEvents((prev) => prev.filter((event) => event._id !== pendingDelete._id));
+      setFeedback({ type: 'success', text: 'Event deleted.' });
+      setPendingDelete(null);
     } catch (err) {
       console.error('Delete event error', err);
+      setFeedback({ type: 'error', text: err.message || 'Unable to delete the event.' });
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -116,6 +148,7 @@ function EventManager() {
     }
     setBulkLoading(true);
     setBulkError('');
+    setFeedback(null);
     try {
       const res = await fetch(`${apiRoot}/api/events/bulk-import`, {
         method: 'POST',
@@ -126,39 +159,44 @@ function EventManager() {
         body: JSON.stringify({ rawData: bulkText }),
       });
       const json = await res.json();
-      if (json.success) {
+      if (res.ok && json.success) {
         setBulkText('');
-        load();
-        alert(`Imported ${json.count} events successfully.`);
+        setFeedback({ type: 'success', text: `Imported ${json.count} events successfully.` });
+        await load();
       } else {
-        setBulkError(json.message || 'Bulk import failed.');
+        throw new Error(json.message || 'Bulk import failed.');
       }
     } catch (err) {
       console.error('Bulk import error', err);
-      setBulkError('Unable to import events.');
+      setBulkError(err.message || 'Unable to import events.');
     } finally {
       setBulkLoading(false);
     }
   };
 
-  const copyCaption = (ev) => {
+  const copyCaption = async (ev) => {
     const text = generateCaption(ev);
-    navigator.clipboard
-      .writeText(text)
-      .then(() => alert('Announcement copied to clipboard.'))
-      .catch(() => alert('Unable to copy to clipboard.'));
+    try {
+      if (!navigator.clipboard) throw new Error('Clipboard access is unavailable in this browser.');
+      await navigator.clipboard.writeText(text);
+      setFeedback({ type: 'success', text: 'Announcement copied to clipboard.' });
+    } catch (err) {
+      console.error('Copy caption error', err);
+      setFeedback({ type: 'error', text: err.message || 'Unable to copy the announcement.' });
+    }
   };
 
   const genCaptionServer = async (id) => {
     try {
       const res = await fetch(`${apiRoot}/api/events/${id}/generate-caption`, { headers: { Authorization: `Bearer ${token}` } });
       const json = await res.json();
-      if (json.success && json.data) {
-        navigator.clipboard.writeText(json.data.caption);
-        alert('Server-generated caption copied.');
-      }
+      if (!res.ok || !json.success || !json.data?.caption) throw new Error(json.message || 'Unable to generate an announcement.');
+      if (!navigator.clipboard) throw new Error('Clipboard access is unavailable in this browser.');
+      await navigator.clipboard.writeText(json.data.caption);
+      setFeedback({ type: 'success', text: 'Server-generated announcement copied to clipboard.' });
     } catch (err) {
       console.error('Generate caption error', err);
+      setFeedback({ type: 'error', text: err.message || 'Unable to generate an announcement.' });
     }
   };
 
@@ -198,13 +236,24 @@ function EventManager() {
         <button
           type="button"
           onClick={load}
-          className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+          disabled={loading}
+          className="inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          Refresh
+          {loading ? 'Loading…' : 'Refresh'}
         </button>
       </div>
 
-      <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      {feedback && <StatusNotice type={feedback.type} className="mt-4">{feedback.text}</StatusNotice>}
+      {loadError && (
+        <StatusNotice type="error" className="mt-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <span>{loadError}</span>
+            <button type="button" onClick={load} className="font-bold underline underline-offset-2">Try again</button>
+          </div>
+        </StatusNotice>
+      )}
+
+      {!loading && !loadError && <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {[
           { label: 'Total', value: summary.total, tone: 'text-slate-900' },
           { label: 'Upcoming', value: summary.upcoming, tone: 'text-indigo-600' },
@@ -216,7 +265,7 @@ function EventManager() {
             <p className={`mt-4 text-3xl font-black ${item.tone}`}>{item.value}</p>
           </div>
         ))}
-      </div>
+      </div>}
 
       <div className="mt-8 grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
         <div className="rounded-[1.75rem] border border-slate-200 bg-slate-50 p-5 shadow-sm">
@@ -299,9 +348,10 @@ function EventManager() {
             <div className="flex flex-wrap gap-3 pt-2">
               <button
                 type="submit"
-                className="inline-flex items-center justify-center rounded-full bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-700"
+                disabled={saving}
+                className="inline-flex min-h-11 items-center justify-center rounded-xl bg-indigo-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {editing ? 'Save changes' : 'Create event'}
+                {saving ? 'Saving…' : editing ? 'Save changes' : 'Create event'}
               </button>
             </div>
           </form>
@@ -320,7 +370,7 @@ function EventManager() {
               placeholder='JSON: [{"title":"Seminar","date":"2026-07-15T10:00","description":"...","venue":"St. Mary"}]\nCSV: title,date,description,venue'
             />
 
-            {bulkError && <p className="mt-3 text-sm font-medium text-rose-600">{bulkError}</p>}
+            {bulkError && <StatusNotice type="error" className="mt-3">{bulkError}</StatusNotice>}
 
             <button
               type="button"
@@ -384,6 +434,10 @@ function EventManager() {
             <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-6 text-center text-sm font-medium text-slate-600">
               Loading events…
             </div>
+          ) : loadError ? (
+            <div className="mt-5 rounded-2xl border border-rose-200 bg-rose-50 p-6 text-center text-sm text-rose-700">
+              Events could not be displayed. Use the retry action above to try again.
+            </div>
           ) : filteredEvents.length === 0 ? (
             <div className="mt-5 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm text-slate-600">
               No events match your current search or filter.
@@ -402,7 +456,7 @@ function EventManager() {
 
                     <div className="flex flex-wrap justify-end gap-2">
                       <button type="button" onClick={() => startEdit(ev)} className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100">Edit</button>
-                      <button type="button" onClick={() => toggle(ev._id)} className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100">{ev.status === 'Upcoming' ? 'Mark completed' : 'Mark upcoming'}</button>
+                      <button type="button" onClick={() => toggle(ev._id)} disabled={togglingId === ev._id} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60">{togglingId === ev._id ? 'Updating…' : ev.status === 'Upcoming' ? 'Mark completed' : 'Mark upcoming'}</button>
                     </div>
                   </div>
 
@@ -425,7 +479,7 @@ function EventManager() {
                   <div className="mt-4 flex flex-wrap gap-2">
                     <button type="button" onClick={() => copyCaption(ev)} className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100">Copy caption</button>
                     <button type="button" onClick={() => genCaptionServer(ev._id)} className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100">Generate announcement</button>
-                    <button type="button" onClick={() => del(ev._id)} className="rounded-full border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700 transition hover:bg-rose-100">Delete</button>
+                    <button type="button" onClick={() => del(ev._id)} className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 transition hover:bg-rose-100">Delete</button>
                   </div>
                 </article>
               ))}
@@ -433,6 +487,16 @@ function EventManager() {
           )}
         </div>
       </div>
+      {pendingDelete && (
+        <ConfirmDialog
+          title="Delete this event?"
+          message={`This will permanently remove "${pendingDelete.title || 'this event'}" from the event schedule.`}
+          confirmLabel="Delete event"
+          processing={deleting}
+          onConfirm={confirmDelete}
+          onCancel={() => setPendingDelete(null)}
+        />
+      )}
     </div>
   );
 }
@@ -463,50 +527,62 @@ export default function AdminContent() {
 
   const currentCategory = categoryMap[section] || null;
 
+  if (!sectionTitles[section] || !currentCategory) {
+    return (
+      <main className="min-h-full bg-slate-50 px-4 py-8 sm:px-6">
+        <div className="mx-auto max-w-3xl rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+          <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-rose-600">Content area not found</p>
+          <h1 className="mt-2 text-2xl font-black text-slate-900">This content section is unavailable</h1>
+          <p className="mt-2 text-sm leading-6 text-slate-600">Choose a supported content area from the administration command center.</p>
+          <Link to="/admin/control" className="mt-5 inline-flex min-h-11 items-center rounded-xl bg-indigo-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-indigo-700">
+            Open administration
+          </Link>
+        </div>
+      </main>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-gray-50 px-6 py-8">
-      <div className="max-w-6xl mx-auto space-y-8">
-        <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-8">
-          <h1 className="text-3xl font-extrabold text-gray-900 mb-3">{title}</h1>
-          <p className="text-sm text-gray-600 mb-6">
-            This section is designed to become your CMS control panel for managing {title.toLowerCase()} entries, images, and captions.
+    <main className="min-h-full bg-slate-50 px-4 py-8 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-6xl space-y-6">
+        <header className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
+          <p className="text-[10px] font-bold uppercase tracking-[0.28em] text-indigo-600">Public content</p>
+          <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-900">{title}</h1>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
+            {section === 'event-manager'
+              ? 'Create and maintain the public community event schedule, and manage its supporting gallery media.'
+              : `Upload and maintain the media and captions in the ${title.toLowerCase()} collection.`}
           </p>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="rounded-3xl border border-slate-200 p-5 bg-slate-50">
-              <h2 className="font-bold text-lg text-slate-900">What to expect</h2>
-              <ul className="mt-3 space-y-2 text-sm text-slate-600">
-                <li>• Upload and manage media assets</li>
-                <li>• Add captions, titles, and display categories</li>
-                <li>• Control featured gallery content</li>
-                <li>• Delete outdated or archived items</li>
-              </ul>
+        </header>
+
+        <div className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
+          <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+            <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-violet-600">Section tools</p>
+            <h2 className="mt-2 text-xl font-black text-slate-900">{section === 'event-manager' ? 'Event operations' : 'Gallery operations'}</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              {section === 'event-manager'
+                ? 'Use the event workspace below to create, update, import, and organize scheduled events.'
+                : 'Use the collection workspace below to review, edit, or remove existing gallery assets.'}
+            </p>
+            <div className="mt-5 rounded-2xl border border-indigo-100 bg-indigo-50 p-4 text-sm leading-6 text-indigo-900">
+              {section === 'event-manager'
+                ? 'Event changes appear on the public events calendar.'
+                : 'Gallery changes update the media associated with this public section.'}
             </div>
-            <div className="rounded-3xl border border-slate-200 p-5 bg-white shadow-sm">
-              <h2 className="font-bold text-lg text-slate-900">Upload Gallery Item</h2>
-              <p className="mt-3 text-sm text-slate-600">
-                Use this form to upload a new item directly into the selected gallery category.
-              </p>
-              <div className="mt-6">
-                <GalleryUploader defaultCategory={currentCategory || 'executives'} />
-              </div>
+          </section>
+
+          <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+            <h2 className="text-lg font-black text-slate-900">Add gallery media</h2>
+            <p className="mt-1 text-sm text-slate-600">Upload an image or video, then add its title, caption, and display options.</p>
+            <div className="mt-5">
+              <GalleryUploader defaultCategory={currentCategory} />
             </div>
-          </div>
+          </section>
         </div>
 
-        {section === 'event-manager' ? (
-          <EventManager />
-        ) : currentCategory ? (
-          <GalleryManager category={currentCategory} title={title} />
-        ) : (
-          <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-8">
-            <h2 className="text-2xl font-semibold text-gray-900">No gallery management available</h2>
-            <p className="mt-3 text-sm text-slate-600">
-              This section is not mapped to a gallery category yet. Uploads are still accepted, but content management features are only available for sections with a connected category.
-            </p>
-          </div>
-        )}
+        {section === 'event-manager' ? <EventManager /> : <GalleryManager category={currentCategory} title={title} />}
       </div>
-    </div>
+    </main>
   );
 }
 
@@ -518,6 +594,7 @@ function GalleryUploader({ defaultCategory }) {
   const [featured, setFeatured] = React.useState(false);
   const [tags, setTags] = React.useState('');
   const [loading, setLoading] = React.useState(false);
+  const [feedback, setFeedback] = React.useState(null);
   const apiRoot = import.meta.env.VITE_API_URL || '';
   const token = localStorage.getItem('clan_token');
 
@@ -528,7 +605,7 @@ function GalleryUploader({ defaultCategory }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!file && !title) {
-      alert('Please provide a file or a direct url/title.');
+      setFeedback({ type: 'error', text: 'Choose a media file or enter a title.' });
       return;
     }
 
@@ -541,6 +618,7 @@ function GalleryUploader({ defaultCategory }) {
     form.append('tags', tags);
 
     setLoading(true);
+    setFeedback(null);
     try {
       const res = await fetch(`${apiRoot}/api/gallery`, {
         method: 'POST',
@@ -550,15 +628,12 @@ function GalleryUploader({ defaultCategory }) {
         body: form
       });
       const json = await res.json();
-      if (json.success) {
-        alert('Uploaded successfully.');
-        setFile(null); setTitle(''); setCaption(''); setTags(''); setFeatured(false);
-      } else {
-        alert(json.message || 'Upload failed.');
-      }
+      if (!res.ok || !json.success) throw new Error(json.message || 'Upload failed.');
+      setFeedback({ type: 'success', text: 'Media uploaded successfully.' });
+      setFile(null); setTitle(''); setCaption(''); setTags(''); setFeatured(false);
     } catch (err) {
       console.error(err);
-      alert('Upload error.');
+      setFeedback({ type: 'error', text: err.message || 'Unable to upload media.' });
     } finally {
       setLoading(false);
     }
@@ -566,9 +641,10 @@ function GalleryUploader({ defaultCategory }) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-3 text-sm">
+      {feedback && <StatusNotice type={feedback.type}>{feedback.text}</StatusNotice>}
       <div>
         <label className="block text-xs text-slate-500 mb-1">Image File</label>
-        <input type="file" accept="image/*,video/*" onChange={e => setFile(e.target.files[0])} />
+        <input type="file" accept="image/*,video/*" onChange={e => setFile(e.target.files[0] || null)} />
       </div>
       <div>
         <label className="block text-xs text-slate-500 mb-1">Title</label>
@@ -598,8 +674,8 @@ function GalleryUploader({ defaultCategory }) {
         <input className="w-full border p-2 rounded" value={tags} onChange={e => setTags(e.target.value)} placeholder="e.g. leadership,2026" />
       </div>
       <div>
-        <button type="submit" disabled={loading} className="bg-indigo-600 text-white px-4 py-2 rounded">
-          {loading ? 'Uploading…' : 'Upload'}
+        <button type="submit" disabled={loading} className="min-h-11 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60">
+          {loading ? 'Uploading…' : 'Upload media'}
         </button>
       </div>
     </form>
@@ -613,6 +689,10 @@ function GalleryManager({ category, title }) {
   const [editingItemId, setEditingItemId] = useState(null);
   const [editValues, setEditValues] = useState({ title: '', caption: '' });
   const [editFiles, setEditFiles] = useState({});
+  const [feedback, setFeedback] = useState(null);
+  const [pendingDelete, setPendingDelete] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
+  const [savingId, setSavingId] = useState(null);
 
   const apiRoot = import.meta.env.VITE_API_URL || '';
   const token = localStorage.getItem('clan_token');
@@ -627,15 +707,14 @@ function GalleryManager({ category, title }) {
         }
       });
       const json = await response.json();
-      console.log('GalleryManager fetched items:', json);
-      if (json.success) {
+      if (response.ok && json.success) {
         setItems(json.data || []);
       } else {
-        setError(json.message || 'Unable to fetch gallery items.');
+        throw new Error(json.message || 'Unable to fetch gallery items.');
       }
     } catch (err) {
       console.error('GalleryManager fetch error:', err);
-      setError('Unable to connect to gallery service.');
+      setError(err.message || 'Unable to connect to gallery service.');
     } finally {
       setLoading(false);
     }
@@ -645,25 +724,29 @@ function GalleryManager({ category, title }) {
     loadItems();
   }, [category]);
 
-  const handleDelete = async (id) => {
-    if (!window.confirm('Delete this gallery item?')) return;
+  const handleDelete = (item) => setPendingDelete(item);
+
+  const confirmDelete = async () => {
+    if (!pendingDelete || deletingId) return;
+    setDeletingId(pendingDelete._id);
+    setFeedback(null);
     try {
-      const response = await fetch(`${apiRoot}/api/gallery/${id}`, {
+      const response = await fetch(`${apiRoot}/api/gallery/${pendingDelete._id}`, {
         method: 'DELETE',
         headers: {
           Authorization: `Bearer ${token}`
         }
       });
       const json = await response.json();
-      if (json.success) {
-        // remove locally to avoid full refresh
-        setItems(prev => prev.filter(i => i._id !== id));
-      } else {
-        alert(json.message || 'Delete failed.');
-      }
+      if (!response.ok || !json.success) throw new Error(json.message || 'Delete failed.');
+      setItems(prev => prev.filter(item => item._id !== pendingDelete._id));
+      setFeedback({ type: 'success', text: 'Gallery item deleted.' });
+      setPendingDelete(null);
     } catch (err) {
       console.error('Delete error:', err);
-      alert('Could not delete item.');
+      setFeedback({ type: 'error', text: err.message || 'Could not delete item.' });
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -679,6 +762,8 @@ function GalleryManager({ category, title }) {
   };
 
   const saveEdit = async (id) => {
+    setSavingId(id);
+    setFeedback(null);
     try {
       let response;
       const file = editFiles[id];
@@ -706,17 +791,16 @@ function GalleryManager({ category, title }) {
       }
 
       const json = await response.json();
-      if (json.success) {
-        // update local state with returned item if available
-        const updated = json.data;
-        setItems(prev => prev.map(it => (it._id === id ? (updated || { ...it, ...editValues }) : it)));
-        cancelEditing();
-      } else {
-        alert(json.message || 'Update failed.');
-      }
+      if (!response.ok || !json.success) throw new Error(json.message || 'Update failed.');
+      const updated = json.data;
+      setItems(prev => prev.map(it => (it._id === id ? (updated || { ...it, ...editValues }) : it)));
+      cancelEditing();
+      setFeedback({ type: 'success', text: 'Gallery changes saved.' });
     } catch (err) {
       console.error('Update error:', err);
-      alert('Unable to save changes.');
+      setFeedback({ type: 'error', text: err.message || 'Unable to save changes.' });
+    } finally {
+      setSavingId(null);
     }
   };
 
@@ -728,17 +812,21 @@ function GalleryManager({ category, title }) {
           <p className="mt-2 text-sm text-slate-600">Review, edit, or delete gallery assets in the current category.</p>
         </div>
         <button
+          type="button"
           onClick={loadItems}
-          className="w-full sm:w-auto rounded-full border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          disabled={loading}
+          className="w-full min-h-11 rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
         >
-          Refresh
+          {loading ? 'Loading…' : 'Refresh'}
         </button>
       </div>
 
+      {feedback && <StatusNotice type={feedback.type} className="mb-4">{feedback.text}</StatusNotice>}
+
       {loading ? (
-        <div className="text-sm text-slate-500">Loading gallery items…</div>
+        <div role="status" className="rounded-2xl border border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-600">Loading gallery items…</div>
       ) : error ? (
-        <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">{error}</div>
+        <StatusNotice type="error">{error}</StatusNotice>
       ) : items.length === 0 ? (
         <div className="rounded-2xl border border-slate-200 bg-slate-50 p-6 text-sm text-slate-600">
           No gallery items found for the selected category yet.
@@ -782,22 +870,28 @@ function GalleryManager({ category, title }) {
                 )}
                 <div className="mt-4 flex flex-wrap gap-2">
                   <button
+                    type="button"
                     onClick={() => (editingItemId === item._id ? saveEdit(item._id) : startEditing(item))}
-                    className="rounded-full bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+                    disabled={savingId === item._id}
+                    className="min-h-10 rounded-xl bg-indigo-600 px-3 py-2 text-sm font-bold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    {editingItemId === item._id ? 'Save' : 'Edit'}
+                    {savingId === item._id ? 'Saving…' : editingItemId === item._id ? 'Save changes' : 'Edit'}
                   </button>
                   {editingItemId === item._id ? (
                     <button
+                      type="button"
                       onClick={cancelEditing}
-                      className="rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                      disabled={savingId === item._id}
+                      className="min-h-10 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       Cancel
                     </button>
                   ) : null}
                   <button
-                    onClick={() => handleDelete(item._id)}
-                    className="rounded-full border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-100"
+                    type="button"
+                    onClick={() => handleDelete(item)}
+                    disabled={deletingId === item._id}
+                    className="min-h-10 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-bold text-rose-700 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     Delete
                   </button>
@@ -806,6 +900,16 @@ function GalleryManager({ category, title }) {
             </div>
           ))}
         </div>
+      )}
+      {pendingDelete && (
+        <ConfirmDialog
+          title="Delete this gallery item?"
+          message={`This will permanently remove "${pendingDelete.title || 'this gallery item'}".`}
+          confirmLabel="Delete item"
+          processing={deletingId === pendingDelete._id}
+          onConfirm={confirmDelete}
+          onCancel={() => setPendingDelete(null)}
+        />
       )}
     </div>
   );

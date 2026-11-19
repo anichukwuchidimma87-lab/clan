@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Modal from '../components/Modal';
+import StatusNotice from '../components/StatusNotice';
 
 const EXECUTIVE_POSITIONS = [
   'President',
@@ -95,10 +96,14 @@ export default function ExecutiveManagement() {
   const navigate = useNavigate();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const [parishError, setParishError] = useState('');
   const [message, setMessage] = useState({ text: '', isError: false });
   const [editingId, setEditingId] = useState(null);
   const [formData, setFormData] = useState(emptyForm());
   const [creating, setCreating] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [loadingParishes, setLoadingParishes] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [parishes, setParishes] = useState([]);
 
@@ -131,6 +136,8 @@ export default function ExecutiveManagement() {
   }, [users]);
 
   const fetchApprovedUsers = async () => {
+    setLoading(true);
+    setLoadError('');
     try {
       const token = localStorage.getItem('clan_token');
       const response = await fetch(`${apiBase}/api/v1/users`, {
@@ -147,18 +154,17 @@ export default function ExecutiveManagement() {
       );
 
       setUsers(leadershipUsers);
-      setMessage({ text: '', isError: false });
     } catch (error) {
-      setMessage({
-        text: error.message || 'Unable to load executive records.',
-        isError: true,
-      });
+      setUsers([]);
+      setLoadError(error.message || 'Unable to load executive records.');
     } finally {
       setLoading(false);
     }
   };
 
   const fetchParishes = async () => {
+    setLoadingParishes(true);
+    setParishError('');
     try {
       const token = localStorage.getItem('clan_token');
       const response = await fetch(`${apiBase}/api/v1/parishes`, {
@@ -173,6 +179,9 @@ export default function ExecutiveManagement() {
     } catch (error) {
       console.error('Failed to fetch parishes:', error);
       setParishes([]);
+      setParishError(error.message || 'Unable to load parish options.');
+    } finally {
+      setLoadingParishes(false);
     }
   };
 
@@ -225,6 +234,7 @@ export default function ExecutiveManagement() {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+    if (saving) return;
     const token = localStorage.getItem('clan_token');
 
     // Prevent submitting an update when no member is selected for editing
@@ -232,6 +242,7 @@ export default function ExecutiveManagement() {
       setMessage({ text: 'No executive selected to update. Please pick a member to edit or use "Add Executive".', isError: true });
       return;
     }
+    setSaving(true);
     try {
       const builtName = buildDisplayName({
         title: formData.title,
@@ -303,35 +314,53 @@ export default function ExecutiveManagement() {
         text: error.message || 'Unable to save executive details.',
         isError: true,
       });
+    } finally {
+      setSaving(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 p-6">
-      <div className="max-w-6xl mx-auto space-y-6">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+    <main className="min-h-screen bg-slate-50 px-4 py-8 md:px-6">
+      <div className="mx-auto max-w-6xl space-y-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <p className="text-xs uppercase tracking-[0.28em] text-indigo-600 font-bold">Leadership Management</p>
-            <h1 className="text-3xl font-black text-slate-900 mt-2">Executive Council</h1>
+            <p className="text-[10px] font-bold uppercase tracking-[0.28em] text-indigo-600">Leadership management</p>
+            <h1 className="mt-2 text-3xl font-black text-slate-900">Executive Council</h1>
           </div>
-          <div className="flex gap-3">
-            <button onClick={openForCreate} className="bg-indigo-600 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-indigo-700">
+          <div className="flex flex-wrap gap-3">
+            <button type="button" onClick={openForCreate} className="inline-flex min-h-11 items-center justify-center rounded-xl bg-indigo-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-indigo-700">
               Add Executive
             </button>
-            <button onClick={() => navigate('/dashboard')} className="bg-slate-900 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-slate-800">
+            <button type="button" onClick={() => navigate('/dashboard')} className="inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
               Back to Dashboard
             </button>
           </div>
         </div>
 
         {message.text && (
-          <div className={`rounded-2xl border px-4 py-3 text-sm font-medium ${message.isError ? 'bg-red-50 border-red-200 text-red-700' : 'bg-emerald-50 border-emerald-200 text-emerald-700'}`}>
+          <StatusNotice type={message.isError ? 'error' : 'success'}>
             {message.text}
+          </StatusNotice>
+        )}
+
+        {parishError && (
+          <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
+            <StatusNotice type="error" className="flex-1">{parishError}</StatusNotice>
+            <button type="button" onClick={fetchParishes} disabled={loadingParishes} className="inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-wait disabled:opacity-60">
+              {loadingParishes ? 'Loading...' : 'Retry parishes'}
+            </button>
           </div>
         )}
 
         {loading ? (
-          <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center text-slate-500">Loading executive list...</div>
+          <div role="status" aria-live="polite" className="rounded-2xl border border-slate-200 bg-white p-10 text-center text-sm text-slate-500">Loading executive list...</div>
+        ) : loadError ? (
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <StatusNotice type="error">{loadError}</StatusNotice>
+            <button type="button" onClick={fetchApprovedUsers} className="mt-4 inline-flex min-h-11 items-center justify-center rounded-xl bg-indigo-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-indigo-700">
+              Retry
+            </button>
+          </div>
         ) : (
           <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
             <div className="px-5 py-4 border-b border-slate-200 bg-slate-50 flex flex-col md:flex-row md:items-center md:justify-between gap-2">
@@ -388,7 +417,7 @@ export default function ExecutiveManagement() {
                                 </div>
                               </div>
 
-                              <button onClick={() => startEdit(user)} className="bg-indigo-600 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-indigo-700">Edit</button>
+                              <button type="button" onClick={() => startEdit(user)} className="inline-flex min-h-11 items-center justify-center rounded-xl bg-indigo-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-indigo-700">Edit</button>
                             </div>
                           );
                         })}
@@ -515,14 +544,14 @@ export default function ExecutiveManagement() {
             </div>
 
             <div className="flex gap-3 pt-2">
-              <button type="submit" disabled={!creating && !editingId} className={`flex-1 bg-indigo-600 text-white px-4 py-2.5 rounded-xl text-sm font-bold hover:bg-indigo-700 ${(!creating && !editingId) ? 'opacity-50 cursor-not-allowed' : ''}`}>
-                {creating ? 'Create Executive' : 'Save Changes'}
+              <button type="submit" disabled={saving || (!creating && !editingId)} className={`flex-1 inline-flex min-h-11 items-center justify-center rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50`}>
+                {saving ? 'Saving...' : creating ? 'Create Executive' : 'Save Changes'}
               </button>
               <button type="button" onClick={cancelEdit} className="flex-1 bg-slate-200 text-slate-700 px-4 py-2.5 rounded-xl text-sm font-bold hover:bg-slate-300">Cancel</button>
             </div>
           </form>
         </Modal>
       )}
-    </div>
+    </main>
   );
 }

@@ -6,7 +6,7 @@ export default function CheckIn() {
   const [lastName, setLastName] = useState('');
   const [phone, setPhone] = useState('');
   const [gender, setGender] = useState('Male');
-  const [ageBracket, setAgeBracket] = useState('21–30');
+  const [dateOfBirth, setDateOfBirth] = useState('');
   const [commissionedStatus, setCommissionedStatus] = useState('Not Commissioned');
   const [yearCommissioned, setYearCommissioned] = useState('');
   const [employmentStatus, setEmploymentStatus] = useState('Employed');
@@ -68,6 +68,10 @@ export default function CheckIn() {
       setMessage({ text: "Please select an active parish from the list.", isError: true });
       return;
     }
+    if (!dateOfBirth) {
+      setMessage({ text: 'Please provide your date of birth.', isError: true });
+      return;
+    }
     if (commissionedStatus === 'Commissioned' && !yearCommissioned) {
       setMessage({ text: 'Please select the year commissioned or choose Not Commissioned.', isError: true });
       return;
@@ -85,7 +89,7 @@ export default function CheckIn() {
           lastName, 
           phone, 
           gender, 
-          ageBracket, 
+          dateOfBirth,
           yearCommissioned: commissionedStatus === 'Commissioned' ? Number(yearCommissioned) : null,
           employmentStatus, 
           deanery, 
@@ -98,6 +102,7 @@ export default function CheckIn() {
       if (result.success) {
         setMessage({ text: `✓ Registration Successful! Welcome, ${title} ${firstName}. Your profile is active.`, isError: false });
         setFirstName(''); setLastName(''); setPhone('');
+        setDateOfBirth('');
         setCommissionedStatus('Not Commissioned');
         setYearCommissioned('');
       } else {
@@ -165,14 +170,15 @@ export default function CheckIn() {
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
-              <label className="block mb-1 text-gray-500">Age Cohort Bracket</label>
-              <select className="border p-2.5 rounded-xl w-full bg-gray-50 text-gray-800 focus:outline-none focus:bg-white" value={ageBracket} onChange={e => setAgeBracket(e.target.value)}>
-                <option value="Under 20">Under 20</option>
-                <option value="21–30">21–30</option>
-                <option value="31–40">31–40</option>
-                <option value="41–50">41–50</option>
-                <option value="51+">51+</option>
-              </select>
+              <label className="block mb-1 text-gray-500">Date of Birth</label>
+              <input
+                type="date"
+                max={new Date().toISOString().split('T')[0]}
+                className="border p-2.5 rounded-xl w-full bg-gray-50 text-gray-800 focus:outline-none focus:bg-white"
+                value={dateOfBirth}
+                onChange={e => setDateOfBirth(e.target.value)}
+                required
+              />
             </div>
 
             <div>

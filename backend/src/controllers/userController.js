@@ -65,13 +65,42 @@ export const approveUser = async (req, res) => {
       return res.status(400).json({ message: 'User is already approved' });
     }
 
+    const { role, parish, permissions } = req.body;
+    const normalizedRole = normalizeUserRole(role || user.requestedRole || 'member');
+
+    if (normalizedRole === 'president' && !parish) {
+      return res.status(400).json({ message: 'A parish is required when approving a parish president.' });
+    }
+
     user.status = 'approved';
-    user.role = 'member';
+    user.role = normalizedRole;
+    user.parish = normalizedRole === 'president' ? String(parish).trim() : '';
+    if (normalizedRole === 'president') {
+      user.permissions = {
+        view: permissions?.view ?? true,
+        export: permissions?.export ?? true,
+        add: permissions?.add ?? false,
+        update: permissions?.update ?? true,
+        suspend: permissions?.suspend ?? false,
+        delete: permissions?.delete ?? false
+      };
+    } else {
+      user.permissions = {
+        view: false,
+        export: false,
+        add: false,
+        update: false,
+        suspend: false,
+        delete: false
+      };
+    }
     await user.save();
 
     res.json({
       success: true,
-      message: 'User account approved successfully as a member.',
+      message: normalizedRole === 'president'
+        ? 'User account approved as parish president.'
+        : 'User account approved successfully.',
       user
     });
   } catch (error) {
@@ -82,7 +111,7 @@ export const approveUser = async (req, res) => {
 
 export const updateUserRole = async (req, res) => {
   try {
-    const { role } = req.body;
+    const { role, parish, permissions } = req.body;
     const targetUser = await User.findById(req.params.id);
 
     if (!targetUser) {
@@ -97,6 +126,28 @@ export const updateUserRole = async (req, res) => {
     }
 
     targetUser.role = normalizedRole;
+    if (normalizedRole === 'president') {
+      if (!parish) return res.status(400).json({ success: false, message: 'A parish is required for a president.' });
+      targetUser.parish = String(parish).trim();
+      targetUser.permissions = {
+        view: permissions?.view ?? targetUser.permissions?.view ?? true,
+        export: permissions?.export ?? targetUser.permissions?.export ?? true,
+        add: permissions?.add ?? targetUser.permissions?.add ?? false,
+        update: permissions?.update ?? targetUser.permissions?.update ?? true,
+        suspend: permissions?.suspend ?? targetUser.permissions?.suspend ?? false,
+        delete: permissions?.delete ?? targetUser.permissions?.delete ?? false
+      };
+    } else {
+      targetUser.parish = '';
+      targetUser.permissions = {
+        view: false,
+        export: false,
+        add: false,
+        update: false,
+        suspend: false,
+        delete: false
+      };
+    }
     await targetUser.save();
 
     res.json({
@@ -108,7 +159,9 @@ export const updateUserRole = async (req, res) => {
         email: targetUser.email,
         role: targetUser.role,
         status: targetUser.status,
-        position: targetUser.position
+        position: targetUser.position,
+        parish: targetUser.parish,
+        permissions: targetUser.permissions
       }
     });
   } catch (error) {

@@ -1,6 +1,8 @@
 import express from 'express';
 import { 
   publicCheckIn, 
+  addLector,
+  getUpcomingBirthdays,
   getRegistryData, 
   updateLector, 
   deleteLector, 
@@ -8,7 +10,7 @@ import {
   bulkUploadParishes,
   bulkUnsuspend
 } from '../controllers/lectorController.js';
-import { protect, authorizeApproval } from '../middleware/authMiddleware.js'; // protect + role helpers
+import { protect, authorizeApproval, requirePermission } from '../middleware/authMiddleware.js'; // protect + role helpers
 
 const router = express.Router();
 
@@ -18,9 +20,11 @@ router.post('/checkin', publicCheckIn);
 
 // Secure executive registry paths (Protected by your protect middleware)
 router.get('/registry', protect, getRegistryData);
+router.get('/birthdays', protect, getUpcomingBirthdays);
+router.post('/registry', protect, requirePermission('add'), addLector);
 router.post('/parishes/bulk-upload', protect, bulkUploadParishes);
 router.put('/update/:id', protect, updateLector);
-router.delete('/delete/:id', protect, deleteLector);
+router.delete('/delete/:id', protect, requirePermission('delete'), deleteLector);
 router.post('/bulk-unsuspend', protect, authorizeApproval, bulkUnsuspend);
 
 export default router;

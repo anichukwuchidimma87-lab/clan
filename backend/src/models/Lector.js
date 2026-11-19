@@ -7,9 +7,11 @@ const lectorSchema = new mongoose.Schema({
   gender: { type: String, required: true, enum: ['Male', 'Female'] },
   ageBracket: { 
     type: String, 
-    required: true, 
-    enum: ['Under 20', '21–30', '31–40', '41–50', '51+'] 
+    required: false,
+    default: null,
+    enum: ['Under 20', '21–30', '31–40', '41–50', '51+', null]
   },
+  dateOfBirth: { type: Date, default: null },
   yearCommissioned: { type: Number, default: null },
   employmentStatus: { 
     type: String, 

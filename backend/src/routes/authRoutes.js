@@ -48,7 +48,7 @@ const parseFullName = (rawName = '', fallbackTitle = '') => {
 // 1. REGISTER NEW USER ROUTE
 router.post('/register', async (req, res) => {
   try {
-    const { name, email, password, role, yearCommissioned, title, firstName, lastName } = req.body;
+    const { name, email, password, role, yearCommissioned, title, firstName, lastName, parish, requestedRole, requestedParish } = req.body;
 
     const userExists = await User.findOne({ email });
     if (userExists) {
@@ -66,8 +66,19 @@ router.post('/register', async (req, res) => {
       name: String(name || parsedName.name || '').trim() || [parsedName.title, parsedName.firstName, parsedName.lastName].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim(),
       email,
       password: hashedPassword,
-      role: normalizeUserRole(role || 'member'),
-      status: 'approved'
+      role: 'member',
+      status: 'pending',
+      requestedRole: normalizeUserRole(requestedRole || role || 'member') === 'president' ? 'president' : 'member',
+      requestedParish: String(requestedParish || parish || '').trim(),
+      parish: '',
+      permissions: {
+        view: false,
+        export: false,
+        add: false,
+        update: false,
+        suspend: false,
+        delete: false
+      }
     };
 
     const parsedYear = Number(yearCommissioned);
@@ -109,6 +120,9 @@ router.post('/login', async (req, res) => {
     if (!isMatch) {
       return res.status(401).json({ message: "Invalid credentials" });
     }
+    if (user.status !== 'approved') {
+      return res.status(403).json({ message: 'Your account is pending approval.' });
+    }
 
     const normalizedRole = normalizeUserRole(user.role);
     if (user.role !== normalizedRole) {
@@ -126,7 +140,8 @@ router.post('/login', async (req, res) => {
         name: user.name || [user.title, user.firstName, user.lastName].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim(),
         email: user.email,
         parish: user.parish || '',
-        phone: user.phone || ''
+        phone: user.phone || '',
+        permissions: user.permissions || {}
       },
       process.env.JWT_SECRET,
       { expiresIn: '24h' }

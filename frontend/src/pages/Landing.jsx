@@ -1,154 +1,221 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import HeroSection from '../components/public/HeroSection';
 import LeadershipShowcase from '../components/public/LeadershipShowcase';
 import FeaturedGallery from '../components/public/FeaturedGallery';
 import CommunityEvents from '../components/public/CommunityEvents';
 
 function Landing() {
-  const navigate = useNavigate();
   const [galleryItems, setGalleryItems] = useState([]);
   const [financialSummary, setFinancialSummary] = useState(null);
   const [loadingGallery, setLoadingGallery] = useState(true);
+  const [galleryError, setGalleryError] = useState(false);
   const [loadingSummary, setLoadingSummary] = useState(true);
+  const [summaryError, setSummaryError] = useState(false);
+  const [galleryReload, setGalleryReload] = useState(0);
+  const [summaryReload, setSummaryReload] = useState(0);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
 
-  const yearOptions = [2024, 2025, 2026, 2027];
+  const yearOptions = Array.from({ length: 5 }, (_, index) => new Date().getFullYear() - 2 + index);
 
   useEffect(() => {
+    let active = true;
     const apiRoot = import.meta.env.VITE_API_URL || '';
 
     const fetchGallery = async () => {
+      setLoadingGallery(true);
+      setGalleryError(false);
       try {
-        setLoadingGallery(true);
         const response = await axios.get(`${apiRoot}/api/public/random-gallery`);
-        console.log('Public random gallery response:', response.data);
-        setGalleryItems(response.data.data || []);
+        if (!response.data?.success || !Array.isArray(response.data.data)) {
+          throw new Error('Public gallery response was not successful.');
+        }
+        if (active) {
+          setGalleryItems(response.data.data);
+          setGalleryError(false);
+        }
       } catch (error) {
         console.error('Could not fetch gallery items:', error);
-        setGalleryItems([]);
+        if (active) {
+          setGalleryItems([]);
+          setGalleryError(true);
+        }
       } finally {
-        setLoadingGallery(false);
-      }
-    };
-
-    const fetchSummary = async () => {
-      try {
-        setLoadingSummary(true);
-        const response = await axios.get(`${apiRoot}/api/public/stats?year=${selectedYear}`);
-        console.log('Public ledger stats response for year', selectedYear, ':', response.data);
-        setFinancialSummary(response.data.data || null);
-      } catch (error) {
-        console.error('Could not fetch public ledger summary:', error);
-        setFinancialSummary(null);
-      } finally {
-        setLoadingSummary(false);
+        if (active) setLoadingGallery(false);
       }
     };
 
     fetchGallery();
+    return () => { active = false; };
+  }, [galleryReload]);
+
+  useEffect(() => {
+    let active = true;
+    const apiRoot = import.meta.env.VITE_API_URL || '';
+
+    const fetchSummary = async () => {
+      setLoadingSummary(true);
+      setSummaryError(false);
+      try {
+        const response = await axios.get(`${apiRoot}/api/public/stats?year=${selectedYear}`);
+        if (!response.data?.success || !response.data.data) {
+          throw new Error('Public ledger summary response was not successful.');
+        }
+        if (active) {
+          setFinancialSummary(response.data.data);
+          setSummaryError(false);
+        }
+      } catch (error) {
+        console.error('Could not fetch public ledger summary:', error);
+        if (active) {
+          setFinancialSummary(null);
+          setSummaryError(true);
+        }
+      } finally {
+        if (active) setLoadingSummary(false);
+      }
+    };
+
     fetchSummary();
-  }, [selectedYear]);
+    return () => { active = false; };
+  }, [selectedYear, summaryReload]);
+
+  const summaryCards = [
+    { label: 'Total parishes', value: financialSummary?.totalParishes ?? 0, tone: 'text-indigo-700' },
+    { label: 'Compliant parishes', value: financialSummary?.compliantParishes ?? 0, tone: 'text-emerald-700' },
+    { label: 'Outstanding parishes', value: financialSummary?.outstandingParishes ?? 0, tone: 'text-amber-700' },
+    { label: 'Registered lectors', value: financialSummary?.totalLectors ?? 0, tone: 'text-slate-800' }
+  ];
 
   return (
-    <div id="top" className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
-      {/* Hero Section */}
-      <HeroSection />
+    <div id="top" className="min-h-screen bg-slate-50 text-slate-800">
+      <main>
+        <HeroSection />
+        <CommunityEvents />
 
-      {/* Community Events Section */}
-      <CommunityEvents />
-
-      {/* Featured Gallery Section */}
-      <section id="gallery" className="py-16 bg-white">
-        <div className="max-w-7xl mx-auto px-4">
-          <div className="mb-8 flex flex-col items-center gap-3 text-center">
-            <h2 className="text-4xl font-bold text-gray-800">Live Community Gallery</h2>
-            <p className="text-gray-600 max-w-2xl">
-              Experience our premium portal gallery with the newest event chronicles leading into executive leadership highlights.
-            </p>
+        <section id="gallery" aria-labelledby="gallery-heading" className="bg-white py-14 sm:py-16 lg:py-20">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <SectionHeading
+              eyebrow="Life in our community"
+              title="Community gallery"
+              description="Explore moments from our events, service, and leadership across the deanery."
+            />
+            <FeaturedGallery
+              items={galleryItems}
+              loading={loadingGallery}
+              error={galleryError}
+              onRetry={() => setGalleryReload((current) => current + 1)}
+            />
           </div>
-          <FeaturedGallery items={loadingGallery ? [] : galleryItems} />
-        </div>
-      </section>
+        </section>
 
-      {/* Public Ledger Summary Section */}
-      <section className="py-16 bg-gray-50">
-        <div className="max-w-7xl mx-auto px-4">
-          <div className="flex flex-col sm:flex-row justify-between items-center mb-8">
-            <div>
-              <h2 className="text-4xl font-bold mb-2 text-gray-800">Public Ledger Snapshot</h2>
-              <p className="text-gray-600 max-w-2xl">
-                The Deanery publishes a transparent summary of parish compliance and community strength without exposing sensitive amounts.
-              </p>
+        <section id="ledger" aria-labelledby="ledger-heading" className="bg-slate-50 py-14 sm:py-16 lg:py-20">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div className="mb-8 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
+              <SectionHeading
+                eyebrow="Open and accountable"
+                title="Public ledger snapshot"
+                description="A year-by-year view of parish participation and compliance, without exposing sensitive financial amounts."
+                className="mb-0"
+              />
+              <label className="flex shrink-0 flex-col gap-2 text-xs font-bold uppercase tracking-wide text-slate-600">
+                Financial year
+                <select
+                  aria-label="Select financial year"
+                  value={selectedYear}
+                  onChange={(event) => setSelectedYear(Number(event.target.value))}
+                  className="min-w-36 rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold normal-case tracking-normal text-slate-800 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                >
+                  {yearOptions.map((year) => (
+                    <option key={year} value={year}>{year}</option>
+                  ))}
+                </select>
+              </label>
             </div>
-            <div className="mt-4 sm:mt-0">
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Select Financial Year:</label>
-              <select
-                value={selectedYear}
-                onChange={(e) => setSelectedYear(Number(e.target.value))}
-                className="px-4 py-2 border-2 border-blue-700 rounded-lg font-semibold text-blue-700 bg-white hover:bg-blue-50 transition cursor-pointer"
-              >
-                {yearOptions.map((year) => (
-                  <option key={year} value={year}>{year}</option>
+
+            {summaryError ? (
+              <div role="alert" className="rounded-3xl border border-amber-200 bg-white p-6 text-sm text-amber-900 shadow-sm">
+                <p>The public ledger summary is unavailable right now.</p>
+                <button type="button" onClick={() => setSummaryReload((current) => current + 1)} className="mt-4 inline-flex min-h-11 items-center justify-center rounded-xl bg-indigo-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-indigo-700 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-200">
+                  Retry summary
+                </button>
+              </div>
+            ) : loadingSummary ? (
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4" aria-label="Loading public ledger summary" role="status">
+                {summaryCards.map((card) => (
+                  <div key={card.label} className="animate-pulse rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+                    <div className="h-3 w-2/3 rounded bg-slate-200" />
+                    <div className="mt-5 h-9 w-1/3 rounded bg-slate-100" />
+                  </div>
                 ))}
-              </select>
+              </div>
+            ) : !financialSummary ? (
+              <div className="rounded-3xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500 shadow-sm">
+                No public ledger summary is available for {selectedYear}.
+              </div>
+            ) : (
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                {summaryCards.map((card) => (
+                  <article key={card.label} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">{card.label}</p>
+                    <p className={`mt-3 text-3xl font-black sm:text-4xl ${card.tone}`}>{Number(card.value).toLocaleString()}</p>
+                    <p className="mt-2 text-xs font-medium text-slate-400">Financial year {selectedYear}</p>
+                  </article>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section id="leadership" aria-labelledby="leadership-heading" className="bg-white py-14 sm:py-16 lg:py-20">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <SectionHeading
+              eyebrow="People who serve"
+              title="Leadership team"
+              description="Meet the leaders and patrons guiding the CLAN Benin Deanery in faith, service, and community."
+            />
+            <LeadershipShowcase />
+          </div>
+        </section>
+
+        <section id="join" aria-labelledby="join-heading" className="bg-slate-50 px-4 py-14 sm:px-6 sm:py-16 lg:px-8 lg:py-20">
+          <div className="mx-auto max-w-7xl overflow-hidden rounded-[2rem] bg-gradient-to-br from-indigo-950 via-indigo-900 to-blue-800 px-6 py-10 text-white shadow-xl sm:px-10 sm:py-14">
+            <div className="mx-auto max-w-3xl text-center">
+              <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-indigo-200">Be part of the community</p>
+              <h2 id="join-heading" className="mt-3 text-3xl font-black tracking-tight sm:text-4xl">Join CLAN Benin Deanery</h2>
+              <p className="mx-auto mt-4 max-w-2xl text-sm leading-7 text-indigo-100 sm:text-base">
+                Connect with fellow lectors, access community resources, and stay informed about upcoming activities.
+              </p>
+              <div className="mt-7 flex flex-col justify-center gap-3 sm:flex-row">
+                <Link to="/register" className="inline-flex min-h-12 items-center justify-center rounded-xl bg-white px-6 py-3 text-sm font-bold text-indigo-900 shadow-sm transition hover:bg-indigo-50 focus:outline-none focus:ring-4 focus:ring-white/30">
+                  Register with CLAN
+                </Link>
+                <Link to="/login" className="inline-flex min-h-12 items-center justify-center rounded-xl border border-white/30 bg-white/10 px-6 py-3 text-sm font-bold text-white transition hover:bg-white/15 focus:outline-none focus:ring-4 focus:ring-white/30">
+                  Member sign in
+                </Link>
+              </div>
             </div>
           </div>
-          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="rounded-3xl bg-white p-8 shadow-sm border border-gray-100 text-center">
-              <p className="text-sm uppercase tracking-[0.24em] text-gray-400 mb-3">Total Parishes</p>
-              <p className="text-4xl font-extrabold text-blue-700">{loadingSummary ? '—' : financialSummary?.totalParishes ?? 'N/A'}</p>
-            </div>
-            <div className="rounded-3xl bg-white p-8 shadow-sm border border-gray-100 text-center">
-              <p className="text-sm uppercase tracking-[0.24em] text-gray-400 mb-3">Compliant Parishes</p>
-              <p className="text-4xl font-extrabold text-emerald-600">{loadingSummary ? '—' : financialSummary?.compliantParishes ?? 'N/A'}</p>
-            </div>
-            <div className="rounded-3xl bg-white p-8 shadow-sm border border-gray-100 text-center">
-              <p className="text-sm uppercase tracking-[0.24em] text-gray-400 mb-3">Outstanding Parishes</p>
-              <p className="text-4xl font-extrabold text-amber-600">{loadingSummary ? '—' : financialSummary?.outstandingParishes ?? 'N/A'}</p>
-            </div>
-            <div className="rounded-3xl bg-white p-8 shadow-sm border border-gray-100 text-center">
-              <p className="text-sm uppercase tracking-[0.24em] text-gray-400 mb-3">Registered Lectors</p>
-              <p className="text-4xl font-extrabold text-slate-800">{loadingSummary ? '—' : financialSummary?.totalLectors ?? 'N/A'}</p>
-            </div>
-          </div>
-        </div>
-      </section>
+        </section>
+      </main>
 
-      {/* Leadership Showcase Section */}
-      <section id="leadership" className="py-16 bg-white">
-        <div className="max-w-7xl mx-auto px-4">
-          <h2 className="text-4xl font-bold text-center mb-4 text-gray-800">Leadership Team</h2>
-          <p className="text-center text-gray-600 mb-12 max-w-2xl mx-auto">
-            Meet the visionary leaders and patrons guiding the CLAN Benin Deanery toward greater heights of service and spiritual growth.
-          </p>
-          <LeadershipShowcase />
-        </div>
-      </section>
-
-      {/* Call to Action */}
-      <section className="py-16 bg-blue-700 text-white">
-        <div className="max-w-4xl mx-auto text-center px-4">
-          <h2 className="text-3xl font-bold mb-4">Join Our Community</h2>
-          <p className="text-lg mb-8 text-blue-100">
-            Whether you're looking to connect with fellow members, access resources, or stay updated with the latest developments, we welcome you to be part of our growing network.
-          </p>
-          <button
-            onClick={() => navigate('/register')}
-            className="px-8 py-3 bg-white text-blue-700 font-semibold rounded hover:bg-gray-100 transition"
-          >
-            Get Started Today
-          </button>
-        </div>
-      </section>
-
-      {/* Footer */}
-      <footer className="bg-gray-800 text-gray-300 py-8">
-        <div className="max-w-7xl mx-auto px-4 text-center">
-          <p>&copy; 2026 CLAN Benin Deanery. Dedicated to the service of faith and community.</p>
+      <footer className="bg-slate-950 px-4 py-8 text-slate-300 sm:px-6">
+        <div className="mx-auto flex max-w-7xl flex-col gap-3 text-center text-xs sm:flex-row sm:items-center sm:justify-between sm:text-left">
+          <p>&copy; {new Date().getFullYear()} CLAN Benin Deanery. Dedicated to the service of faith and community.</p>
+          <a href="#top" className="font-semibold text-indigo-200 hover:text-white">Back to top</a>
         </div>
       </footer>
+    </div>
+  );
+}
+
+function SectionHeading({ eyebrow, title, description, className = 'mb-8' }) {
+  return (
+    <div className={`max-w-3xl ${className}`}>
+      <p className="text-[10px] font-bold uppercase tracking-[0.26em] text-indigo-600">{eyebrow}</p>
+      <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-900 sm:text-3xl lg:text-4xl">{title}</h2>
+      <p className="mt-3 text-sm leading-7 text-slate-600 sm:text-base">{description}</p>
     </div>
   );
 }

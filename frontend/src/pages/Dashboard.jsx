@@ -1,70 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, NavLink } from 'react-router-dom';
-
-// SIDEBAR NAV INTERFACE
-const RestrictedSidebar = ({ isVisible, user, navigate }) => {
-  if (!isVisible) return null;
-
-  const normalizedRole = user.role === 'admin' ? 'executive' : (user.role || 'member');
-  const isExecutive = normalizedRole === 'executive' || normalizedRole === 'superadmin';
-  const isPresident = normalizedRole === 'president';
-  const canApprove = ['superadmin', 'executive'].includes(normalizedRole);
-  const canViewRegistry = ['superadmin', 'executive', 'president'].includes(normalizedRole);
-  const canViewLedger = ['superadmin', 'executive', 'president'].includes(normalizedRole);
-  const canAccessSettings = ['superadmin', 'executive'].includes(normalizedRole);
-
-  return (
-    <aside className="w-64 bg-indigo-950 p-6 flex flex-col gap-5 text-gray-200 min-h-screen border-r border-indigo-900 shadow-xl">
-      <div className="flex flex-col gap-1 items-start mb-4">
-        <span className="text-xl font-black tracking-tight text-white">Deanery Base</span>
-        <span className="text-[10px] uppercase font-bold text-indigo-400">Executive Administration Hub</span>
-      </div>
-      
-      <nav className="space-y-2 flex-grow">
-        <div className="px-3 py-2 text-[10px] uppercase tracking-[0.35em] text-indigo-300 font-bold">
-          Core Registry
-        </div>
-        <NavLink to="/dashboard" end className={({ isActive }) => `flex items-center gap-3 p-3 rounded-lg font-semibold text-xs ${isActive ? 'bg-indigo-600 text-white shadow-sm' : 'hover:bg-indigo-700'}`}>🏠 Welcome Page</NavLink>
-        {canViewRegistry && (
-          <NavLink to="/registry" className={({ isActive }) => `flex items-center gap-3 p-3 rounded-lg font-semibold text-xs ${isActive ? 'bg-indigo-600 text-white' : 'hover:bg-indigo-700'}`}>📋 Registry Roster</NavLink>
-        )}
-        {canViewLedger && (
-          <NavLink to="/ledger" className={({ isActive }) => `flex items-center gap-3 p-3 rounded-lg font-semibold text-xs ${isActive ? 'bg-indigo-600 text-white' : 'hover:bg-indigo-700'}`}>🧾 Financial Ledger Matrix</NavLink>
-        )}
-
-        {isExecutive && (
-          <>
-            <div className="mt-4 px-3 py-2 text-[10px] uppercase tracking-[0.35em] text-indigo-300 font-bold">
-              Content Management
-            </div>
-            <NavLink to="/admin/executives" className={({ isActive }) => `flex items-center gap-3 p-3 rounded-lg font-semibold text-xs ${isActive ? 'bg-indigo-600 text-white' : 'hover:bg-indigo-700'}`}>👥 Executive Council</NavLink>
-            <NavLink to="/admin/content/executives-gallery" className={({ isActive }) => `flex items-center gap-3 p-3 rounded-lg font-semibold text-xs ${isActive ? 'bg-indigo-600 text-white' : 'hover:bg-indigo-700'}`}>🖼️ Executives Gallery</NavLink>
-            <NavLink to="/admin/content/patrons-gallery" className={({ isActive }) => `flex items-center gap-3 p-3 rounded-lg font-semibold text-xs ${isActive ? 'bg-indigo-600 text-white' : 'hover:bg-indigo-700'}`}>👑 Patronage Gallery</NavLink>
-            <NavLink to="/admin/content/event-chronicles" className={({ isActive }) => `flex items-center gap-3 p-3 rounded-lg font-semibold text-xs ${isActive ? 'bg-indigo-600 text-white' : 'hover:bg-indigo-700'}`}>🎫 Event Chronicles</NavLink>
-            <NavLink to="/admin/content/event-manager" className={({ isActive }) => `flex items-center gap-3 p-3 rounded-lg font-semibold text-xs ${isActive ? 'bg-indigo-600 text-white' : 'hover:bg-indigo-700'}`}>📅 Event Manager</NavLink>
-            <NavLink to="/admin/content/orphanage-visitations" className={({ isActive }) => `flex items-center gap-3 p-3 rounded-lg font-semibold text-xs ${isActive ? 'bg-indigo-600 text-white' : 'hover:bg-indigo-700'}`}>🏡 Orphanage Visitations</NavLink>
-            <NavLink to="/admin/content/awards-recognition" className={({ isActive }) => `flex items-center gap-3 p-3 rounded-lg font-semibold text-xs ${isActive ? 'bg-indigo-600 text-white' : 'hover:bg-indigo-700'}`}>🏅 Awards & Recognition</NavLink>
-            <NavLink to="/admin/content/voalc" className={({ isActive }) => `flex items-center gap-3 p-3 rounded-lg font-semibold text-xs ${isActive ? 'bg-indigo-600 text-white' : 'hover:bg-indigo-700'}`}>🥇 VOALC Gallery</NavLink>
-            <NavLink to="/admin/control" className={({ isActive }) => `flex items-center gap-3 p-3 rounded-lg font-semibold text-xs ${isActive ? 'bg-indigo-600 text-white' : 'hover:bg-indigo-700'}`}>🛠️ System Settings</NavLink>
-          </>
-        )}
-
-        {canApprove && (
-          <NavLink to="/users" className={({ isActive }) => `flex items-center gap-3 p-3 rounded-lg font-semibold text-xs ${isActive ? 'bg-indigo-600 text-white' : 'hover:bg-indigo-700'}`}>👥 Manage User Access</NavLink>
-        )}
-      </nav>
-
-      <div className="border-t border-indigo-800 pt-4 mt-4 space-y-2">
-        <button 
-          onClick={() => { localStorage.removeItem('clan_token'); navigate('/login'); }} 
-          className="w-full text-left flex items-center gap-3 p-2.5 rounded bg-amber-500/10 text-amber-500 text-xs font-bold hover:bg-amber-500 hover:text-indigo-950 transition"
-        >
-          🔒 Lock & Sign Out
-        </button>
-      </div>
-    </aside>
-  );
-};
+import { useNavigate } from 'react-router-dom';
 
 export default function Dashboard() {
   const [user, setUser] = useState({ name: '', role: '', position: '', parish: '', isLoggedIn: false });
@@ -72,6 +7,10 @@ export default function Dashboard() {
   const [parishCount, setParishCount] = useState(0);
   const [executiveCouncil, setExecutiveCouncil] = useState([]);
   const [logoUrl, setLogoUrl] = useState('');
+  const [parishRosterStats, setParishRosterStats] = useState(null);
+  const [parishRosterError, setParishRosterError] = useState('');
+  const [pendingApprovals, setPendingApprovals] = useState(null);
+  const [pendingApprovalsError, setPendingApprovalsError] = useState('');
   const navigate = useNavigate();
   const apiBase = import.meta.env.VITE_API_URL || 'https://clan-3slh.onrender.com';
 
@@ -85,19 +24,6 @@ export default function Dashboard() {
     if (ct.includes('application/json')) return JSON.parse(text);
     try { return JSON.parse(text); } catch { return { success: true, data: text }; }
   };
-
-  const fallbackExecutives = [
-    { name: 'Mr. Abatsu Michael', role: 'President', parish: 'Holy Trinity' },
-    { name: 'Mrs. Ella Idahosa', role: 'Vice President', parish: 'St. Mary Obe' },
-    { name: 'Mr. Osagie Ukhurebor', role: 'Secretary', parish: 'St. Joseph' },
-    { name: 'Miss Anichikwu Chidimma', role: 'Assistant Secretary', parish: 'Assumption Uteh' },
-    { name: 'Mr. Desmond Osaji', role: 'Treasurer', parish: 'St. Mathias Ologbo' },
-    { name: 'Mrs. Augustina Okpara', role: 'Financial Secretary', parish: 'St. Paul' },
-    { name: 'Mrs. Vivian Ugorji', role: 'Assistant Financial Secretary', parish: 'Blessed Tansi' },
-    { name: 'Mr. CSP Isibor', role: 'PRO', parish: 'St. Augustine' },
-    { name: 'Miss Nkeiruka Ifeachor', role: 'Welfare Officer', parish: 'Holy Cross' },
-    { name: 'Mr. Onwe Paul', role: 'Provost', parish: 'Blessed Tansi' }
-  ];
 
   const parseJwt = (token) => {
     try { return JSON.parse(atob(token.split('.')[1])); } catch (e) { return null; }
@@ -120,13 +46,43 @@ export default function Dashboard() {
       if (token) {
         const payload = parseJwt(token);
         if (payload) {
+          const role = String(payload.role || 'member').toLowerCase();
           setUser({
             name: formatUserName(payload),
-            role: payload.role,
+            role,
             position: payload.position || 'Member',
-            parish: payload.parish,
+            parish: payload.parish || '',
             isLoggedIn: true
           });
+
+          if (role === 'president') {
+            try {
+              const rosterData = await safeFetch(`${apiBase}/api/lectors/registry?limit=1000&page=1`, {
+                headers: { Authorization: `Bearer ${token}` }
+              });
+              const roster = rosterData.ownParish || rosterData.data || [];
+              setParishRosterStats({
+                total: roster.length,
+                active: roster.filter((member) => (member.status || 'Active') === 'Active').length,
+                suspended: roster.filter((member) => member.status === 'Suspended').length
+              });
+            } catch (err) {
+              console.error('Parish roster stats error', err.message || err);
+              setParishRosterError('Parish roster statistics could not be loaded. Open the roster to try again.');
+            }
+          }
+
+          if (['superadmin', 'executive', 'admin'].includes(role)) {
+            try {
+              const pendingData = await safeFetch(`${apiBase}/api/v1/users/pending`, {
+                headers: { Authorization: `Bearer ${token}` }
+              });
+              setPendingApprovals(pendingData.data?.length || 0);
+            } catch (err) {
+              console.error('Pending approval count error', err.message || err);
+              setPendingApprovalsError('Pending request count could not be loaded.');
+            }
+          }
         }
       }
 
@@ -166,106 +122,148 @@ export default function Dashboard() {
     })();
   }, []);
 
+  const normalizedRole = user.role === 'admin' ? 'executive' : (user.role || 'member');
+  const isExecutive = ['superadmin', 'executive'].includes(normalizedRole);
+  const isPresident = normalizedRole === 'president';
+  const isSuperAdmin = normalizedRole === 'superadmin';
+
+  const workspaceDescription = isPresident
+    ? 'Your parish at a glance. Review your roster, follow up on member records, and stay on top of parish administration.'
+    : isExecutive
+      ? 'Review deanery-wide activity, respond to pending requests, and manage registry and financial operations.'
+      : user.isLoggedIn
+        ? 'Stay connected with your profile and the wider CLAN community.'
+        : 'Catholic Lectors Association of Nigeria | Registry Base';
+
+  const workspaceActions = isPresident
+    ? [
+        { title: 'Parish roster', description: 'View and manage members in your parish.', path: '/registry', mark: 'RG' },
+        { title: 'Financial ledger', description: 'Review parish financial records.', path: '/ledger', mark: 'FL' },
+        { title: 'My profile', description: 'Keep your contact details up to date.', path: '/profile', mark: 'ME' }
+      ]
+    : isExecutive
+      ? [
+          { title: 'Unified registry', description: 'Find parish and lector records.', path: '/registry', mark: 'RG' },
+          { title: 'Financial ledger', description: 'Review deanery financial compliance.', path: '/ledger', mark: 'FL' },
+          { title: 'Access requests', description: 'Review new account approvals.', path: '/users', mark: 'AR', count: pendingApprovals },
+          { title: 'Community calendar', description: 'Browse upcoming and past events.', path: '/events', mark: 'EV' },
+          ...(isSuperAdmin ? [{ title: 'System settings', description: 'Manage platform-wide settings.', path: '/admin/control', mark: 'SYS' }] : [])
+        ]
+      : [
+          { title: 'My profile', description: 'Review your account and contact details.', path: '/profile', mark: 'ME' },
+          { title: 'Public leadership', description: 'Meet the CLAN leadership team.', path: '/leadership', mark: 'EX' },
+          { title: 'Public financials', description: 'View the public financial summary.', path: '/financials', mark: 'FIN' }
+        ];
+
   return (
-    <div className="min-h-screen bg-gray-50 flex text-xs font-semibold text-gray-600">
-      
-      <RestrictedSidebar isVisible={user.isLoggedIn} user={user} navigate={navigate} />
-
-      <main className="flex-grow">
-        <header className="bg-white p-4 border-b border-gray-100 shadow-sm flex flex-wrap justify-between items-center gap-3">
-          <div className="flex flex-col gap-0.5">
-            <h1 className="text-2xl font-black text-gray-900 tracking-tight">CLAN • Benin City Deanery Hub</h1>
-            <p className="text-[11px] text-gray-400">Catholic Lectors Association of Nigeria | Registry Base</p>
-          </div>
-          
-          <div className="flex items-center gap-3">
-            {user.isLoggedIn ? (
-              <>
-                <div className="text-right flex flex-col items-end">
-                  <button
-                    type="button"
-                    onClick={() => navigate('/profile')}
-                    className="font-bold text-gray-900 text-sm hover:text-indigo-700 transition"
-                  >
-                    {user.name}
-                  </button>
-                  <span className="text-[10px] text-indigo-600 uppercase font-bold px-2 py-0.5 rounded bg-indigo-50 border border-indigo-100">{user.role} clearance • {user.parish}</span>
-                </div>
-                <button 
-                  onClick={() => { localStorage.removeItem('clan_token'); window.location.reload(); }} 
-                  className="bg-red-600 hover:bg-red-700 text-white font-bold text-xs px-3 py-2 rounded-lg shadow-sm transition"
-                >
-                  🔒 Sign Out
-                </button>
-              </>
-            ) : (
-              <button 
-                onClick={() => navigate('/login')} 
-                className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-sm transition"
-              >
-                Unlock Ledger & Roster
-              </button>
-            )}
-          </div>
-        </header>
-
-        <div className="p-6 md:p-8 space-y-8 max-w-7xl mx-auto">
-          <section className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 flex flex-col md:flex-row items-center gap-6">
-            <div className="w-40 h-40 bg-indigo-50 rounded-full flex items-center justify-center border-4 border-indigo-100/50 overflow-hidden shrink-0 text-5xl shadow-inner">
-              {logoUrl ? (
-                <img src={logoUrl} alt="CLAN logo" className="w-full h-full object-cover" />
-              ) : (
-                '⛪'
-              )}
-            </div>
-            <div className="flex-grow space-y-2 text-center md:text-left">
-              <h2 className="text-2xl font-extrabold text-gray-900 tracking-tight leading-snug">
-                Welcome to CLAN <span className="text-indigo-600 font-black">Benin City Deanery Hub Portal</span>
-              </h2>
-              <p className="text-sm font-medium text-gray-600 max-w-3xl leading-relaxed">
-                Made up of {parishCount || '0'} active parishes across Benin City. We serve, we grow, and we proclaim the Word together as the body of the Catholic Lectors Association of Nigeria (CLAN).
-              </p>
-            </div>
-          </section>
-
-          {user.isLoggedIn && (
-            <section className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm flex items-center gap-4">
-                <span className="text-3xl p-3 rounded-full bg-blue-50">👥</span>
-                <div>
-                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Sync Registry Strength</p>
-                  <p className="text-2xl font-black text-gray-900 mt-1">{registryCount} <span className="text-sm font-normal text-gray-400">Registered Lectors</span></p>
-                </div>
+    <main className="min-h-screen bg-slate-50 text-sm text-slate-700">
+      <div className="mx-auto max-w-7xl space-y-8 px-4 py-8 sm:px-6 lg:px-8">
+          {!user.isLoggedIn ? (
+            <section className="flex flex-col items-center gap-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm md:flex-row md:p-8">
+              <div className="flex h-28 w-28 shrink-0 items-center justify-center overflow-hidden rounded-full border-4 border-indigo-100/50 bg-indigo-50 text-sm font-black tracking-wide text-indigo-700">
+                {logoUrl ? <img src={logoUrl} alt="CLAN logo" className="h-full w-full object-cover" /> : 'CLAN'}
               </div>
-              <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm flex items-center gap-4">
-                <span className="text-3xl p-3 rounded-full bg-indigo-50">⛪</span>
-                <div>
-                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Structural Deanery Units</p>
-                  <p className="text-2xl font-black text-gray-900 mt-1">{parishCount || 0} <span className="text-sm font-normal text-gray-400">Active Parishes Indexed</span></p>
+              <div className="flex-grow space-y-2 text-center md:text-left">
+                <h2 className="text-2xl font-extrabold text-gray-900 tracking-tight">Welcome to CLAN Benin City Deanery</h2>
+                <p className="text-sm font-medium text-gray-600 max-w-3xl leading-relaxed">
+                  A community of lectors serving across {parishCount || 0} parishes. Sign in to access your workspace, or explore the public leadership and financial information.
+                </p>
+                <button type="button" onClick={() => navigate('/login')} className="mt-2 min-h-11 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-indigo-700">
+                  Sign in to your workspace
+                </button>
+              </div>
+            </section>
+          ) : (
+            <>
+              <section className="rounded-3xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-6 text-white shadow-sm sm:p-8">
+                <p className="text-xs font-bold uppercase tracking-[0.24em] text-indigo-200">
+                  {isPresident ? 'Parish operations' : isExecutive ? 'Deanery overview' : 'Member access'}
+                </p>
+                <h2 className="mt-2 text-2xl font-black">Welcome back, {user.name}</h2>
+                <p className="mt-2 max-w-3xl text-sm text-slate-300">{workspaceDescription}</p>
+              </section>
+
+              {isPresident && parishRosterStats && (
+                <section className="grid gap-4 sm:grid-cols-3">
+                  <DashboardMetric label="Parish members" value={parishRosterStats.total} tone="border-slate-200 bg-white text-slate-900" />
+                  <DashboardMetric label="Active members" value={parishRosterStats.active} tone="border-emerald-100 bg-emerald-50 text-emerald-700" />
+                  <DashboardMetric label="Suspended" value={parishRosterStats.suspended} tone="border-amber-100 bg-amber-50 text-amber-700" />
+                </section>
+              )}
+              {isPresident && parishRosterError && (
+                <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">{parishRosterError}</p>
+              )}
+
+              {isExecutive && (
+                <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                  <DashboardMetric label="Registered lectors" value={registryCount} tone="border-slate-200 bg-white text-slate-900" />
+                  <DashboardMetric label="Parishes" value={parishCount} tone="border-indigo-100 bg-indigo-50 text-indigo-700" />
+                  <DashboardMetric label="Pending access requests" value={pendingApprovals === null ? '—' : pendingApprovals} tone="border-amber-100 bg-amber-50 text-amber-700" />
+                </section>
+              )}
+              {isExecutive && pendingApprovalsError && (
+                <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">{pendingApprovalsError}</p>
+              )}
+
+              <section>
+                <div className="mb-4">
+                  <h2 className="text-xl font-black text-gray-900">Quick access</h2>
+                  <p className="mt-1 text-sm text-gray-500">The tools available for your role.</p>
                 </div>
+                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                  {workspaceActions.map((action) => (
+                    <button
+                      type="button"
+                      key={action.path}
+                      onClick={() => navigate(action.path)}
+                      className="group rounded-3xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-md focus:outline-none focus:ring-4 focus:ring-indigo-100"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <span aria-hidden="true" className="inline-flex h-10 min-w-10 items-center justify-center rounded-xl bg-indigo-50 px-2 text-[10px] font-black uppercase tracking-wide text-indigo-700">{action.mark}</span>
+                        {action.count !== undefined && action.count !== null && (
+                          <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-800">{action.count}</span>
+                        )}
+                      </div>
+                      <h3 className="mt-4 font-bold text-gray-900 group-hover:text-indigo-700">{action.title}</h3>
+                      <p className="mt-1 text-sm font-medium text-gray-500">{action.description}</p>
+                      <span className="mt-4 inline-flex text-xs font-bold text-indigo-600">Open <span className="ml-1" aria-hidden="true">→</span></span>
+                    </button>
+                  ))}
+                </div>
+              </section>
+            </>
+          )}
+
+          {executiveCouncil.length > 0 && (
+            <section className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-5">
+              <div className="border-b pb-3">
+                <h2 className="text-lg font-black text-gray-900 tracking-tight">Deanery leadership</h2>
+                <p className="mt-1 text-sm text-gray-500">Current leadership serving the CLAN community.</p>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {executiveCouncil.map((exec, index) => (
+                  <div key={`${exec.name}-${index}`} className="bg-gray-50/70 border border-gray-100 p-4 rounded-xl flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-full bg-indigo-50 border border-indigo-100/80 flex items-center justify-center font-bold text-xs text-indigo-600 shrink-0">{index + 1}</div>
+                    <div className="space-y-0.5">
+                      <p className="font-bold text-gray-900 text-sm leading-tight">{exec.name}</p>
+                      <p className="text-[10px] text-indigo-600 uppercase font-extrabold tracking-wider">{exec.role}</p>
+                      <p className="text-gray-400 text-[11px] font-medium">{exec.parish}</p>
+                    </div>
+                  </div>
+                ))}
               </div>
             </section>
           )}
+      </div>
+    </main>
+  );
+}
 
-          <section className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-5">
-            <div className="border-b pb-3">
-              <h2 className="text-lg font-black text-gray-900 tracking-tight flex items-center gap-2"><span>👥</span> Benin City General Electors Executive Council</h2>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {(executiveCouncil.length > 0 ? executiveCouncil : fallbackExecutives).map((exec, index) => (
-                <div key={`${exec.name}-${index}`} className="bg-gray-50/70 border border-gray-100 p-4 rounded-xl flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-full bg-indigo-50 border border-indigo-100/80 flex items-center justify-center font-bold text-xs text-indigo-600 tracking-tighter shrink-0">{index + 1}</div>
-                  <div className="space-y-0.5">
-                    <p className="font-bold text-gray-900 text-sm leading-tight">{exec.name}</p>
-                    <p className="text-[10px] text-indigo-600 uppercase font-extrabold tracking-wider">{exec.role}</p>
-                    <p className="text-gray-400 text-[11px] font-medium">{exec.parish}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-        </div>
-      </main>
+function DashboardMetric({ label, value, tone }) {
+  return (
+    <div className={`rounded-2xl border p-5 shadow-sm ${tone}`}>
+      <p className="text-[10px] font-bold uppercase tracking-[0.18em] opacity-70">{label}</p>
+      <p className="mt-3 text-3xl font-black">{value}</p>
     </div>
   );
 }

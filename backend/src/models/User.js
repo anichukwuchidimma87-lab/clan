@@ -38,6 +38,23 @@ const UserSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
+  requestedRole: {
+    type: String,
+    enum: ['member', 'president'],
+    default: 'member'
+  },
+  requestedParish: {
+    type: String,
+    default: ''
+  },
+  permissions: {
+    view: { type: Boolean, default: false },
+    export: { type: Boolean, default: false },
+    add: { type: Boolean, default: false },
+    update: { type: Boolean, default: false },
+    suspend: { type: Boolean, default: false },
+    delete: { type: Boolean, default: false }
+  },
   yearCommissioned: {
     type: Number,
     required: false,

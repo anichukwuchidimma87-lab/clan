@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import StatusNotice from '../components/StatusNotice';
 
 const FILTERS = ['All', 'Upcoming', 'Ongoing', 'Completed'];
 const CATEGORIES = ['All', 'Worship', 'Conference', 'Retreat', 'Meeting', 'Social'];
@@ -122,15 +123,27 @@ export default function EventCalendar() {
   const [viewMode, setViewMode] = useState('grid');
   const [currentMonth, setCurrentMonth] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const [selectedDate, setSelectedDate] = useState(null);
-  const [selectedEvent, setSelectedEvent] = useState(null);
+  const [shareFeedback, setShareFeedback] = useState(null);
+  const [reloadKey, setReloadKey] = useState(0);
   const navigate = useNavigate();
   const apiRoot = import.meta.env.VITE_API_URL || '';
 
   useEffect(() => {
+    if (!shareFeedback) return undefined;
+    const timeoutId = window.setTimeout(() => setShareFeedback(null), 4000);
+    return () => window.clearTimeout(timeoutId);
+  }, [shareFeedback]);
+
+  useEffect(() => {
+    let active = true;
     const fetchEvents = async () => {
       setLoading(true);
+      setError('');
       try {
         const res = await axios.get(`${apiRoot}/api/events/all`);
+        if (!res.data?.success || !Array.isArray(res.data.data)) {
+          throw new Error('Public events response was not successful.');
+        }
         const data = (res.data.data || []).map((event) => ({
           ...event,
           normalizedStatus: getEventStatus(event),
@@ -138,17 +151,21 @@ export default function EventCalendar() {
           sortDate: new Date(event.date).getTime(),
         }));
 
-        setEvents(data);
+        if (active) setEvents(data);
       } catch (err) {
         console.error('EventCalendar fetch error', err);
-        setError('Could not load events.');
+        if (active) {
+          setEvents([]);
+          setError('Could not load events.');
+        }
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
     };
 
     fetchEvents();
-  }, [apiRoot]);
+    return () => { active = false; };
+  }, [apiRoot, reloadKey]);
 
   const featuredEvent = useMemo(() => {
     if (!events.length) return null;
@@ -185,11 +202,16 @@ export default function EventCalendar() {
   }, [events, search, selectedFilter, selectedCategory, sortBy]);
 
   const stats = useMemo(() => {
+    const now = new Date();
     return {
       total: events.length,
       upcoming: events.filter((item) => item.normalizedStatus === 'Upcoming').length,
       ongoing: events.filter((item) => item.normalizedStatus === 'Ongoing').length,
       completed: events.filter((item) => item.normalizedStatus === 'Completed').length,
+      thisMonth: events.filter((item) => {
+        const eventDate = new Date(item.date);
+        return eventDate.getFullYear() === now.getFullYear() && eventDate.getMonth() === now.getMonth();
+      }).length,
     };
   }, [events]);
 
@@ -224,7 +246,7 @@ export default function EventCalendar() {
   }, [filteredEvents, selectedDate]);
 
   const handleShare = async (event) => {
-    const shareUrl = `${window.location.origin}/events`;
+    const shareUrl = `${window.location.origin}/events/${event._id}`;
     const shareText = `${event.title} — ${formatDate(event.date)} at ${event.location || 'Venue TBA'}`;
 
     try {
@@ -239,10 +261,15 @@ export default function EventCalendar() {
 
       if (navigator.clipboard) {
         await navigator.clipboard.writeText(`${shareText} ${shareUrl}`);
-        window.alert('Event link copied to clipboard.');
+        setShareFeedback({ type: 'success', text: 'Event link copied to clipboard.' });
+      } else {
+        setShareFeedback({ type: 'error', text: 'Sharing is not available in this browser.' });
       }
     } catch (error) {
-      console.error('Failed to share event', error);
+      if (error.name !== 'AbortError') {
+        console.error('Failed to share event', error);
+        setShareFeedback({ type: 'error', text: 'Unable to share this event.' });
+      }
     }
   };
 
@@ -274,7 +301,11 @@ export default function EventCalendar() {
                 {tone.label}
               </span>
 
-              <h3 className="mt-4 text-2xl font-black text-slate-900">{event.title}</h3>
+              <h3 className="mt-4 text-2xl font-black text-slate-900">
+                <Link to={`/events/${event._id}`} className="transition hover:text-indigo-700 focus:outline-none focus:underline focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2">
+                  {event.title}
+                </Link>
+              </h3>
             </div>
 
             <div className="rounded-2xl bg-slate-100 px-3 py-2 text-right">
@@ -315,19 +346,18 @@ export default function EventCalendar() {
           </p>
 
           <div className="mt-5 flex flex-wrap gap-3">
-            <button
-              type="button"
-              onClick={() => setSelectedEvent(event)}
-              className="inline-flex items-center justify-center rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700"
+            <Link
+              to={`/events/${event._id}`}
+              className="inline-flex min-h-11 items-center justify-center rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-200"
             >
-              View Details
-            </button>
+              View details
+            </Link>
 
             <a
               href={buildGoogleCalendarUrl(event)}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex items-center justify-center rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
+              className="inline-flex min-h-11 items-center justify-center rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-200"
             >
               Add to Calendar
             </a>
@@ -335,7 +365,7 @@ export default function EventCalendar() {
             <button
               type="button"
               onClick={() => handleShare(event)}
-              className="inline-flex items-center justify-center rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
+              className="inline-flex min-h-11 items-center justify-center rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-200"
             >
               Share
             </button>
@@ -347,79 +377,14 @@ export default function EventCalendar() {
 
   return (
     <>
-      {selectedEvent && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4 py-8 backdrop-blur-sm">
-          <div className="relative w-full max-w-2xl overflow-hidden rounded-[2rem] bg-white shadow-[0_35px_80px_rgba(15,23,42,0.35)]">
-            <div className={`h-2 bg-gradient-to-r ${getStatusTone(selectedEvent.normalizedStatus).accent}`} />
-
-            <div className="p-6 sm:p-8">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <span className={`${getStatusTone(selectedEvent.normalizedStatus).badge} inline-flex items-center gap-2 rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-[0.28em]`}>
-                    <span className={`h-2 w-2 rounded-full ${getStatusTone(selectedEvent.normalizedStatus).dot}`} />
-                    {getStatusTone(selectedEvent.normalizedStatus).label}
-                  </span>
-                  <h3 className="mt-4 text-3xl font-black text-slate-900">{selectedEvent.title}</h3>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => setSelectedEvent(null)}
-                  className="rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100"
-                >
-                  Close
-                </button>
-              </div>
-
-              <div className="mt-6 grid gap-3 sm:grid-cols-2">
-                <div className="rounded-2xl bg-slate-50 p-4">
-                  <p className="text-[10px] uppercase tracking-[0.28em] text-slate-500">Date</p>
-                  <p className="mt-2 text-lg font-bold text-slate-900">{formatDate(selectedEvent.date)}</p>
-                </div>
-
-                <div className="rounded-2xl bg-slate-50 p-4">
-                  <p className="text-[10px] uppercase tracking-[0.28em] text-slate-500">Time</p>
-                  <p className="mt-2 text-lg font-bold text-slate-900">{formatTime(selectedEvent.date)}</p>
-                </div>
-
-                <div className="rounded-2xl bg-slate-50 p-4">
-                  <p className="text-[10px] uppercase tracking-[0.28em] text-slate-500">Venue</p>
-                  <p className="mt-2 text-base font-semibold text-slate-800">{selectedEvent.location || 'Venue TBA'}</p>
-                </div>
-
-                <div className="rounded-2xl bg-slate-50 p-4">
-                  <p className="text-[10px] uppercase tracking-[0.28em] text-slate-500">Category</p>
-                  <p className="mt-2 text-base font-semibold text-slate-800">{selectedEvent.category}</p>
-                </div>
-              </div>
-
-              <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <p className="text-[10px] uppercase tracking-[0.28em] text-slate-500">Description</p>
-                <p className="mt-3 text-sm leading-7 text-slate-700">
-                  {selectedEvent.description || 'More details will be shared soon.'}
-                </p>
-              </div>
-
-              <div className="mt-6 flex flex-wrap gap-3">
-                <a
-                  href={buildGoogleCalendarUrl(selectedEvent)}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center justify-center rounded-full bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-700"
-                >
-                  Add to Calendar
-                </a>
-
-                <button
-                  type="button"
-                  onClick={() => handleShare(selectedEvent)}
-                  className="inline-flex items-center justify-center rounded-full border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
-                >
-                  Share Event
-                </button>
-              </div>
-            </div>
-          </div>
+      {shareFeedback && (
+        <div
+          role={shareFeedback.type === 'error' ? 'alert' : 'status'}
+          className={`fixed right-4 top-4 z-50 w-[calc(100%-2rem)] max-w-sm rounded-2xl border bg-white px-4 py-3 text-sm font-semibold shadow-xl ${
+            shareFeedback.type === 'error' ? 'border-rose-200 text-rose-700' : 'border-emerald-200 text-emerald-700'
+          }`}
+        >
+          {shareFeedback.text}
         </div>
       )}
 
@@ -431,7 +396,7 @@ export default function EventCalendar() {
               <button
                 type="button"
                 onClick={() => navigate('/')}
-                className="inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-sm font-semibold text-indigo-700 transition hover:bg-indigo-100"
+                className="inline-flex min-h-11 items-center gap-2 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-sm font-semibold text-indigo-700 transition hover:bg-indigo-100 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-200"
               >
                 ← Back to home
               </button>
@@ -451,25 +416,27 @@ export default function EventCalendar() {
             </div>
 
             <div className="text-left xl:text-right">
-              <p className="text-sm text-slate-500">Updated with live event status</p>
-              <p className="mt-2 text-2xl font-black text-slate-900">{stats.total} total entries</p>
+              <p className="text-sm text-slate-500">{loading ? 'Loading the event calendar' : error ? 'Event data is unavailable' : 'Updated with live event status'}</p>
+              <p className="mt-2 text-2xl font-black text-slate-900">{loading ? 'Loading events…' : error ? 'Retry to continue' : `${stats.total} total entries`}</p>
             </div>
           </div>
         </div>
 
-        <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {[
-            { label: 'Upcoming', value: stats.upcoming, tone: 'text-indigo-600' },
-            { label: 'Ongoing', value: stats.ongoing, tone: 'text-emerald-600' },
-            { label: 'Completed', value: stats.completed, tone: 'text-slate-600' },
-            { label: 'This month', value: filteredEvents.length, tone: 'text-violet-600' },
-          ].map((stat) => (
-            <div key={stat.label} className="rounded-[1.75rem] border border-slate-200/80 bg-white/90 p-5 shadow-[0_18px_35px_rgba(15,23,42,0.04)] ring-1 ring-slate-100 transition hover:-translate-y-0.5 hover:shadow-[0_22px_45px_rgba(79,70,229,0.08)]">
-              <p className="text-[10px] font-bold uppercase tracking-[0.28em] text-slate-500">{stat.label}</p>
-              <p className={`mt-4 text-3xl font-black ${stat.tone}`}>{stat.value}</p>
-            </div>
-          ))}
-        </div>
+        {!loading && !error && (
+          <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            {[
+              { label: 'Upcoming', value: stats.upcoming, tone: 'text-indigo-600' },
+              { label: 'Ongoing', value: stats.ongoing, tone: 'text-emerald-600' },
+              { label: 'Completed', value: stats.completed, tone: 'text-slate-600' },
+              { label: 'This month', value: stats.thisMonth, tone: 'text-violet-600' },
+            ].map((stat) => (
+              <div key={stat.label} className="rounded-[1.75rem] border border-slate-200/80 bg-white/90 p-5 shadow-[0_18px_35px_rgba(15,23,42,0.04)] ring-1 ring-slate-100 transition hover:-translate-y-0.5 hover:shadow-[0_22px_45px_rgba(79,70,229,0.08)]">
+                <p className="text-[10px] font-bold uppercase tracking-[0.28em] text-slate-500">{stat.label}</p>
+                <p className={`mt-4 text-3xl font-black ${stat.tone}`}>{stat.value}</p>
+              </div>
+            ))}
+          </div>
+        )}
 
         <div className="mt-8 rounded-[2rem] border border-slate-200/80 bg-white/85 p-4 shadow-[0_20px_45px_rgba(15,23,42,0.06)] backdrop-blur-sm sm:p-5">
           <div className="flex flex-col gap-4">
@@ -495,7 +462,8 @@ export default function EventCalendar() {
                       viewMode === mode
                         ? 'bg-slate-900 text-white shadow-md'
                         : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                    }`}
+                    } focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2`}
+                    aria-pressed={viewMode === mode}
                   >
                     {mode === 'grid' ? 'Grid view' : 'List view'}
                   </button>
@@ -514,7 +482,8 @@ export default function EventCalendar() {
                       selectedFilter === filter
                         ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200'
                         : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                    }`}
+                    } focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2`}
+                    aria-pressed={selectedFilter === filter}
                   >
                     {filter}
                   </button>
@@ -531,7 +500,8 @@ export default function EventCalendar() {
                       selectedCategory === category
                         ? 'border-indigo-600 bg-indigo-50 text-indigo-700'
                         : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-700'
-                    }`}
+                    } focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2`}
+                    aria-pressed={selectedCategory === category}
                   >
                     {category}
                   </button>
@@ -543,7 +513,7 @@ export default function EventCalendar() {
                 <select
                   value={sortBy}
                   onChange={(e) => setSortBy(e.target.value)}
-                  className="bg-transparent font-medium text-slate-700 outline-none"
+                  className="rounded-lg bg-transparent font-medium text-slate-700 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
                 >
                   {SORT_OPTIONS.map((option) => (
                     <option key={option.value} value={option.value}>
@@ -561,18 +531,28 @@ export default function EventCalendar() {
             <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
               <div className="max-w-2xl">
                 <p className="text-[10px] font-bold uppercase tracking-[0.35em] text-indigo-200">Featured event</p>
-                <h2 className="mt-4 text-3xl font-black sm:text-4xl">{featuredEvent.title}</h2>
+                <h2 className="mt-4 text-3xl font-black sm:text-4xl">
+                  <Link to={`/events/${featuredEvent._id}`} className="hover:text-indigo-100 focus:outline-none focus:underline focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-indigo-900">
+                    {featuredEvent.title}
+                  </Link>
+                </h2>
                 <p className="mt-4 max-w-xl text-sm leading-7 text-indigo-100">
                   {featuredEvent.description || 'A community moment to look forward to, designed to bring people together.'}
                 </p>
               </div>
 
               <div className="flex flex-wrap gap-3">
+                <Link
+                  to={`/events/${featuredEvent._id}`}
+                  className="inline-flex min-h-11 items-center justify-center rounded-full border border-white/25 bg-white/10 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/15 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-white/40"
+                >
+                  View details
+                </Link>
                 <a
                   href={buildGoogleCalendarUrl(featuredEvent)}
                   target="_blank"
                   rel="noreferrer"
-                  className="inline-flex items-center justify-center rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-100"
+                  className="inline-flex min-h-11 items-center justify-center rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-white/40"
                 >
                   Add to calendar
                 </a>
@@ -580,7 +560,7 @@ export default function EventCalendar() {
                 <button
                   type="button"
                   onClick={() => handleShare(featuredEvent)}
-                  className="inline-flex items-center justify-center rounded-full border border-white/25 bg-white/10 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/15"
+                  className="inline-flex min-h-11 items-center justify-center rounded-full border border-white/25 bg-white/10 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/15 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-white/40"
                 >
                   Share event
                 </button>
@@ -625,14 +605,16 @@ export default function EventCalendar() {
                 <button
                   type="button"
                   onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1))}
-                  className="rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                  aria-label="Previous month"
+                  className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
                 >
                   ←
                 </button>
                 <button
                   type="button"
                   onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1))}
-                  className="rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                  aria-label="Next month"
+                  className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
                 >
                   →
                 </button>
@@ -659,9 +641,11 @@ export default function EventCalendar() {
                     key={key}
                     type="button"
                     onClick={() => setSelectedDate(isSelected ? null : key)}
+                    aria-label={`${day.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}${hasEvents ? `, ${(eventMap.get(key) || []).length} events` : ''}`}
+                    aria-pressed={isSelected}
                     className={`relative flex min-h-[92px] flex-col rounded-2xl border p-2 text-left transition ${
                       isCurrentMonth ? 'border-slate-200 bg-slate-50 text-slate-800' : 'border-slate-100 bg-slate-50/70 text-slate-400'
-                    } ${isSelected ? 'border-indigo-300 bg-indigo-50 ring-2 ring-indigo-100' : 'hover:border-indigo-200 hover:bg-white'}`}
+                    } ${isSelected ? 'border-indigo-300 bg-indigo-50 ring-2 ring-indigo-100' : 'hover:border-indigo-200 hover:bg-white'} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2`}
                   >
                     <span className="text-sm font-bold">{day.getDate()}</span>
 
@@ -699,7 +683,7 @@ export default function EventCalendar() {
                 <button
                   type="button"
                   onClick={() => setSelectedDate(null)}
-                  className="text-sm font-semibold text-indigo-600"
+                  className="rounded-lg px-2 py-1 text-sm font-semibold text-indigo-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
                 >
                   Clear
                 </button>
@@ -712,7 +696,12 @@ export default function EventCalendar() {
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">{event.normalizedStatus}</p>
-                      <p className="mt-2 text-sm font-bold text-slate-900">{event.title}</p>
+                      <Link
+                        to={`/events/${event._id}`}
+                        className="mt-2 inline-block text-sm font-bold text-slate-900 hover:text-indigo-700 focus:outline-none focus:underline focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
+                      >
+                        {event.title}
+                      </Link>
                     </div>
                     <span className={`rounded-full px-2 py-1 text-[9px] font-bold uppercase tracking-[0.18em] ${
                       event.normalizedStatus === 'Ongoing'
@@ -730,24 +719,30 @@ export default function EventCalendar() {
                 </div>
               ))}
 
-              {!selectedDate && events.length === 0 && (
+              {!selectedDate && !loading && !error && events.length === 0 && (
                 <p className="text-sm text-slate-500">There are no upcoming events right now.</p>
+              )}
+              {selectedDate && !loading && !error && !(eventMap.get(selectedDate) || []).length && (
+                <p className="text-sm text-slate-500">No events are scheduled for this date.</p>
               )}
             </div>
           </div>
         </div>
 
         {loading ? (
-          <div className="mt-8 rounded-[2rem] border border-slate-200 bg-white p-8 text-center text-slate-600 shadow-sm">
+          <div role="status" aria-live="polite" className="mt-8 rounded-[2rem] border border-slate-200 bg-white p-8 text-center text-slate-600 shadow-sm">
             Loading your calendar…
           </div>
         ) : error ? (
-          <div className="mt-8 rounded-[2rem] border border-rose-200 bg-rose-50 p-8 text-center text-rose-700 shadow-sm">
-            {error}
+          <div className="mt-8 rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+            <StatusNotice type="error">{error}</StatusNotice>
+            <button type="button" onClick={() => setReloadKey((current) => current + 1)} className="mt-5 inline-flex min-h-11 items-center justify-center rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-indigo-700 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-200">
+              Retry calendar
+            </button>
           </div>
-        ) : (selectedDate ? eventMap.get(selectedDate) || [] : filteredEvents).length === 0 ? (
+        ) : visibleEvents.length === 0 ? (
           <div className="mt-8 rounded-[2rem] border border-slate-200 bg-white p-8 text-center text-slate-600 shadow-sm">
-            No events match your current search or selected date.
+            {events.length === 0 ? 'No events have been posted yet.' : 'No events match your current search or selected date.'}
           </div>
         ) : (
           <div className="mt-8">
@@ -758,7 +753,7 @@ export default function EventCalendar() {
             </div>
 
             <div className={`${viewMode === 'grid' ? 'grid gap-6 xl:grid-cols-2' : 'space-y-5'}`}>
-              {(selectedDate ? filteredEvents.filter((event) => toDateKey(new Date(event.date)) === selectedDate) : filteredEvents).map((event) => renderEventCard(event))}
+              {visibleEvents.map((event) => renderEventCard(event))}
             </div>
           </div>
         )}
@@ -767,3 +762,5 @@ export default function EventCalendar() {
     </>
   );
 }
+
+export { buildGoogleCalendarUrl, deriveCategory, formatDate, formatTime, getEventStatus, getStatusTone };
