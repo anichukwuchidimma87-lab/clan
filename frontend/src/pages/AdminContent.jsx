@@ -24,13 +24,19 @@ function EventManager() {
   const [pendingDelete, setPendingDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [creating, setCreating] = useState(false);
   const [editForm, setEditForm] = useState(emptyEventForm);
   const [editError, setEditError] = useState('');
   const [editSaving, setEditSaving] = useState(false);
+  const [createError, setCreateError] = useState('');
   const [discardRequest, setDiscardRequest] = useState(null);
   const editButtonRefs = useRef({});
+  const createButtonRef = useRef(null);
   const editTitleRef = useRef(null);
   const focusAfterEditRef = useRef(null);
+  const focusAfterCreateRef = useRef(false);
+  const dialogRef = useRef(null);
+  const closeDialogRequestRef = useRef(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [sortBy, setSortBy] = useState('soonest');
@@ -43,6 +49,12 @@ function EventManager() {
   const apiRoot = import.meta.env.VITE_API_URL || '';
   const token = localStorage.getItem('clan_token');
   const editIsDirty = Boolean(editing && JSON.stringify(editForm) !== JSON.stringify(eventFormFromRecord(editing)));
+  const createIsDirty = Boolean(creating && JSON.stringify(form) !== JSON.stringify(emptyEventForm));
+  const dialogIsDirty = editIsDirty || createIsDirty;
+  const dialogOpen = Boolean(editing || creating);
+  const dialogForm = editing ? editForm : form;
+  const setDialogForm = editing ? setEditForm : setForm;
+  const dialogError = editing ? editError : createError;
 
   const getStatusTone = (status = 'Upcoming') => {
     switch (status) {
@@ -56,22 +68,65 @@ function EventManager() {
   };
 
   useEffect(() => {
-    if (editing) editTitleRef.current?.focus();
-    else if (!editSaving && focusAfterEditRef.current) {
-      editButtonRefs.current[focusAfterEditRef.current]?.focus();
-      focusAfterEditRef.current = null;
+    if (dialogOpen) {
+      editTitleRef.current?.focus();
+    } else if (!saving && !editSaving) {
+      if (focusAfterEditRef.current) {
+        editButtonRefs.current[focusAfterEditRef.current]?.focus();
+        focusAfterEditRef.current = null;
+      } else if (focusAfterCreateRef.current) {
+        createButtonRef.current?.focus();
+        focusAfterCreateRef.current = false;
+      }
     }
-  }, [editing, editSaving]);
+  }, [dialogOpen, editing?._id, creating, saving, editSaving]);
 
   useEffect(() => {
-    if (!editIsDirty) return undefined;
+    if (!dialogOpen) return undefined;
+    const previousFocus = document.activeElement;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    const handleDialogKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeDialogRequestRef.current?.();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+
+      const focusable = dialogRef.current?.querySelectorAll(
+        'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      );
+      if (!focusable?.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener('keydown', handleDialogKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleDialogKeyDown);
+      document.body.style.overflow = previousOverflow;
+      if (previousFocus instanceof HTMLElement && previousFocus.isConnected) previousFocus.focus();
+    };
+  }, [dialogOpen]);
+
+  useEffect(() => {
+    if (!dialogIsDirty) return undefined;
     const warnBeforeLeaving = (event) => {
       event.preventDefault();
       event.returnValue = '';
     };
     window.addEventListener('beforeunload', warnBeforeLeaving);
     return () => window.removeEventListener('beforeunload', warnBeforeLeaving);
-  }, [editIsDirty]);
+  }, [dialogIsDirty]);
 
   const load = async () => {
     setLoading(true);
@@ -96,6 +151,7 @@ function EventManager() {
   const save = async (e) => {
     e.preventDefault();
     setSaving(true);
+    setCreateError('');
     setFeedback(null);
     try {
       const res = await fetch(`${apiRoot}/api/events`, {
@@ -108,9 +164,11 @@ function EventManager() {
       setForm(emptyEventForm);
       setEvents((prev) => [...prev, json.data]);
       setFeedback({ type: 'success', text: 'Event created.' });
+      setCreating(false);
+      focusAfterCreateRef.current = true;
     } catch (err) {
       console.error(err);
-      setFeedback({ type: 'error', text: err.message || 'Unable to save the event.' });
+      setCreateError(err.message || 'Unable to save the event.');
     } finally {
       setSaving(false);
     }
@@ -118,12 +176,14 @@ function EventManager() {
 
   const openEditor = (event) => {
     setEditing(event);
+    setCreating(false);
     setEditForm(eventFormFromRecord(event));
     setEditError('');
+    focusAfterEditRef.current = event._id;
   };
 
   const requestEdit = (event) => {
-    if (editIsDirty) {
+    if (dialogIsDirty) {
       setDiscardRequest({ nextEvent: event });
       return;
     }
@@ -137,24 +197,46 @@ function EventManager() {
     focusAfterEditRef.current = eventId;
   };
 
-  const requestCloseEditor = () => {
-    if (editIsDirty) {
-      setDiscardRequest({ nextEvent: null });
-      return;
-    }
-    closeEditor();
-  };
-
   const confirmDiscard = () => {
     const nextEvent = discardRequest?.nextEvent;
+    const editedEventId = editing?._id;
     setDiscardRequest(null);
     setEditing(null);
+    setCreating(false);
+    setEditError('');
+    setCreateError('');
+    setForm(emptyEventForm);
     if (nextEvent) {
       window.requestAnimationFrame(() => openEditor(nextEvent));
       return;
     }
-    focusAfterEditRef.current = editing?._id;
+    if (editedEventId) focusAfterEditRef.current = editedEventId;
+    else focusAfterCreateRef.current = true;
   };
+
+  const openCreateDialog = () => {
+    setForm(emptyEventForm);
+    setCreateError('');
+    setCreating(true);
+  };
+
+  const requestCloseDialog = () => {
+    if (saving || editSaving) return;
+    if (dialogIsDirty) {
+      setDiscardRequest({ nextEvent: null });
+      return;
+    }
+    if (editing) {
+      closeEditor();
+      return;
+    }
+    setCreating(false);
+    setCreateError('');
+    setForm(emptyEventForm);
+    focusAfterCreateRef.current = true;
+  };
+
+  closeDialogRequestRef.current = requestCloseDialog;
 
   const saveEdit = async (event, e) => {
     e.preventDefault();
@@ -333,14 +415,27 @@ function EventManager() {
           <h2 className="mt-2 text-3xl font-black tracking-tight text-slate-900">Event Manager</h2>
         </div>
 
-        <button
-          type="button"
-          onClick={load}
-          disabled={loading}
-          className="inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {loading ? 'Loading…' : 'Refresh'}
-        </button>
+        <div className="flex flex-wrap gap-3">
+          <button
+            ref={createButtonRef}
+            type="button"
+            onClick={openCreateDialog}
+            aria-haspopup="dialog"
+            aria-expanded={creating}
+            aria-controls="create-event-dialog"
+            className="inline-flex min-h-11 items-center justify-center rounded-xl bg-indigo-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-indigo-700"
+          >
+            + Create event
+          </button>
+          <button
+            type="button"
+            onClick={load}
+            disabled={loading}
+            className="inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {loading ? 'Loading…' : 'Refresh'}
+          </button>
+        </div>
       </div>
 
       {feedback && <StatusNotice type={feedback.type} className="mt-4">{feedback.text}</StatusNotice>}
@@ -367,88 +462,8 @@ function EventManager() {
         ))}
       </div>}
 
-      <div className="mt-8 grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
+      <div className="mt-8 grid gap-6 xl:grid-cols-[0.8fr_1.2fr]">
         <div className="rounded-[1.75rem] border border-slate-200 bg-slate-50 p-5 shadow-sm">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-[0.28em] text-slate-500">Entry form</p>
-              <h3 className="mt-2 text-2xl font-black text-slate-900">Create new event</h3>
-            </div>
-          </div>
-
-          <form onSubmit={save} className="mt-6 space-y-4">
-            <div>
-              <label className="mb-2 block text-xs font-bold uppercase tracking-[0.25em] text-slate-500">Title</label>
-              <input
-                placeholder="Annual Parish Retreat"
-                value={form.title}
-                onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))}
-                disabled={saving || editSaving}
-                className="w-full rounded-2xl border border-slate-200 bg-white p-3 text-sm text-slate-700 outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="mb-2 block text-xs font-bold uppercase tracking-[0.25em] text-slate-500">Description</label>
-              <textarea
-                placeholder="Tell the community what this event is about..."
-                value={form.description}
-                onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
-                disabled={saving || editSaving}
-                rows={4}
-                className="w-full rounded-2xl border border-slate-200 bg-white p-3 text-sm text-slate-700 outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100"
-              />
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <label className="mb-2 block text-xs font-bold uppercase tracking-[0.25em] text-slate-500">Date & time ({EVENT_TIME_ZONE})</label>
-                <input
-                  type="datetime-local"
-                  value={form.date}
-                  onChange={(e) => setForm((prev) => ({ ...prev, date: e.target.value }))}
-                  disabled={saving || editSaving}
-                  className="w-full rounded-2xl border border-slate-200 bg-white p-3 text-sm text-slate-700 outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100"
-                  required
-                />
-                <p className="mt-2 text-xs text-slate-500">Enter the local CLAN event time. It is not converted from your device timezone.</p>
-              </div>
-
-              <div>
-                <label className="mb-2 block text-xs font-bold uppercase tracking-[0.25em] text-slate-500">Location</label>
-                <input
-                  placeholder="St. Mary’s Church Hall"
-                  value={form.location}
-                  onChange={(e) => setForm((prev) => ({ ...prev, location: e.target.value }))}
-                  disabled={saving || editSaving}
-                  className="w-full rounded-2xl border border-slate-200 bg-white p-3 text-sm text-slate-700 outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="mb-2 block text-xs font-bold uppercase tracking-[0.25em] text-slate-500">Cover image</label>
-              <input
-                placeholder="Optional image URL"
-                value={form.coverImage}
-                onChange={(e) => setForm((prev) => ({ ...prev, coverImage: e.target.value }))}
-                disabled={saving || editSaving}
-                className="w-full rounded-2xl border border-slate-200 bg-white p-3 text-sm text-slate-700 outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100"
-              />
-            </div>
-
-            <div className="flex flex-wrap gap-3 pt-2">
-              <button
-                type="submit"
-                disabled={saving || editSaving}
-                className="inline-flex min-h-11 items-center justify-center rounded-xl bg-indigo-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {saving ? 'Saving…' : 'Create event'}
-              </button>
-            </div>
-          </form>
-
           <div className="mt-8 rounded-[1.5rem] border border-slate-200 bg-white p-4 shadow-sm">
             <h3 className="text-lg font-black text-slate-900">Bulk event import</h3>
             <p className="mt-2 text-sm leading-6 text-slate-600">
@@ -573,6 +588,7 @@ function EventManager() {
                       <button
                         ref={(node) => { editButtonRefs.current[ev._id] = node; }}
                         type="button"
+                        aria-haspopup="dialog"
                         aria-expanded={editing?._id === ev._id}
                         aria-controls={`event-editor-${ev._id}`}
                         onClick={() => requestEdit(ev)}
@@ -607,86 +623,135 @@ function EventManager() {
                     <button type="button" onClick={() => del(ev._id)} disabled={editSaving} className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60">Delete</button>
                   </div>
 
-                  {editing?._id === ev._id && (
-                    <form
-                      id={`event-editor-${ev._id}`}
-                      onSubmit={(event) => saveEdit(ev, event)}
-                      aria-labelledby={`event-editor-title-${ev._id}`}
-                      className="mt-5 space-y-4 rounded-2xl border border-indigo-200 bg-indigo-50/70 p-4 sm:p-5"
-                    >
-                      <div>
-                        <h5 id={`event-editor-title-${ev._id}`} className="text-lg font-black text-slate-900">Edit event</h5>
-                        <p className="mt-1 text-xs text-slate-600">Event date and time use {EVENT_TIME_ZONE}.</p>
-                      </div>
-                      <label className="block text-xs font-bold text-slate-600">
-                        Title
-                        <input
-                          ref={editTitleRef}
-                          value={editForm.title}
-                          onChange={(event) => setEditForm((previous) => ({ ...previous, title: event.target.value }))}
-                          disabled={editSaving}
-                          required
-                          className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal text-slate-800 outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100"
-                        />
-                      </label>
-                      <label className="block text-xs font-bold text-slate-600">
-                        Description
-                        <textarea
-                          value={editForm.description}
-                          onChange={(event) => setEditForm((previous) => ({ ...previous, description: event.target.value }))}
-                          disabled={editSaving}
-                          rows={3}
-                          className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal text-slate-800 outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100"
-                        />
-                      </label>
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <label className="block text-xs font-bold text-slate-600">
-                          Date & time ({EVENT_TIME_ZONE})
-                          <input
-                            type="datetime-local"
-                            value={editForm.date}
-                            onChange={(event) => setEditForm((previous) => ({ ...previous, date: event.target.value }))}
-                            disabled={editSaving}
-                            required
-                            className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal text-slate-800 outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100"
-                          />
-                        </label>
-                        <label className="block text-xs font-bold text-slate-600">
-                          Location
-                          <input
-                            value={editForm.location}
-                            onChange={(event) => setEditForm((previous) => ({ ...previous, location: event.target.value }))}
-                            disabled={editSaving}
-                            className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal text-slate-800 outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100"
-                          />
-                        </label>
-                      </div>
-                      <label className="block text-xs font-bold text-slate-600">
-                        Cover image URL
-                        <input
-                          value={editForm.coverImage}
-                          onChange={(event) => setEditForm((previous) => ({ ...previous, coverImage: event.target.value }))}
-                          disabled={editSaving}
-                          className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal text-slate-800 outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100"
-                        />
-                      </label>
-                      {editError && <StatusNotice type="error">{editError}</StatusNotice>}
-                      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-                        <button type="button" onClick={requestCloseEditor} disabled={editSaving} className="inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-700 disabled:cursor-not-allowed disabled:opacity-60">
-                          Cancel
-                        </button>
-                        <button type="submit" disabled={editSaving} className="inline-flex min-h-11 items-center justify-center rounded-xl bg-indigo-600 px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-60">
-                          {editSaving ? 'Saving…' : 'Save changes'}
-                        </button>
-                      </div>
-                    </form>
-                  )}
                 </article>
               ))}
             </div>
           )}
         </div>
       </div>
+      {dialogOpen && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/60 p-3 backdrop-blur-sm sm:p-6"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) requestCloseDialog();
+          }}
+        >
+          <section
+            ref={dialogRef}
+            id={editing ? `event-editor-${editing._id}` : 'create-event-dialog'}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="event-dialog-title"
+            aria-describedby="event-dialog-description"
+            tabIndex={-1}
+            className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-3xl border border-slate-200 bg-white shadow-2xl outline-none"
+          >
+            <header className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-slate-100 bg-white/95 px-5 py-4 backdrop-blur sm:px-7">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-indigo-600">Event Manager</p>
+                <h3 id="event-dialog-title" className="mt-1 text-xl font-black text-slate-900 sm:text-2xl">
+                  {editing ? `Edit ${editing.title}` : 'Create a new event'}
+                </h3>
+                <p id="event-dialog-description" className="mt-1 text-xs text-slate-500">
+                  Event date and time use {EVENT_TIME_ZONE}.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={requestCloseDialog}
+                disabled={saving || editSaving}
+                aria-label="Close event dialog"
+                className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-full border border-slate-200 text-lg text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                ×
+              </button>
+            </header>
+
+            <form
+              onSubmit={(event) => (editing ? saveEdit(editing, event) : save(event))}
+              className="space-y-4 p-5 sm:p-7"
+            >
+              <label className="block text-xs font-bold text-slate-600">
+                Title
+                <input
+                  ref={editTitleRef}
+                  value={dialogForm.title}
+                  onChange={(event) => setDialogForm((previous) => ({ ...previous, title: event.target.value }))}
+                  disabled={saving || editSaving}
+                  required
+                  autoComplete="off"
+                  className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal text-slate-800 outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100"
+                />
+              </label>
+
+              <label className="block text-xs font-bold text-slate-600">
+                Description
+                <textarea
+                  value={dialogForm.description}
+                  onChange={(event) => setDialogForm((previous) => ({ ...previous, description: event.target.value }))}
+                  disabled={saving || editSaving}
+                  rows={4}
+                  className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal text-slate-800 outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100"
+                />
+              </label>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="block text-xs font-bold text-slate-600">
+                  Date & time ({EVENT_TIME_ZONE})
+                  <input
+                    type="datetime-local"
+                    value={dialogForm.date}
+                    onChange={(event) => setDialogForm((previous) => ({ ...previous, date: event.target.value }))}
+                    disabled={saving || editSaving}
+                    required
+                    className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal text-slate-800 outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100"
+                  />
+                </label>
+
+                <label className="block text-xs font-bold text-slate-600">
+                  Location
+                  <input
+                    value={dialogForm.location}
+                    onChange={(event) => setDialogForm((previous) => ({ ...previous, location: event.target.value }))}
+                    disabled={saving || editSaving}
+                    className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal text-slate-800 outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100"
+                  />
+                </label>
+              </div>
+
+              <label className="block text-xs font-bold text-slate-600">
+                Cover image URL
+                <input
+                  value={dialogForm.coverImage}
+                  onChange={(event) => setDialogForm((previous) => ({ ...previous, coverImage: event.target.value }))}
+                  disabled={saving || editSaving}
+                  className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal text-slate-800 outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100"
+                />
+              </label>
+
+              {dialogError && <StatusNotice type="error">{dialogError}</StatusNotice>}
+
+              <div className="flex flex-col-reverse gap-3 border-t border-slate-100 pt-4 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={requestCloseDialog}
+                  disabled={saving || editSaving}
+                  className="inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving || editSaving}
+                  className="inline-flex min-h-11 items-center justify-center rounded-xl bg-indigo-600 px-5 py-2 text-sm font-bold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {saving || editSaving ? 'Saving…' : editing ? 'Save changes' : 'Create event'}
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
       {pendingDelete && (
         <ConfirmDialog
           title="Delete this event?"
