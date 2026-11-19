@@ -25,6 +25,7 @@ function EventManager() {
   const [deleting, setDeleting] = useState(false);
   const [editing, setEditing] = useState(null);
   const [creating, setCreating] = useState(false);
+  const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
   const [editForm, setEditForm] = useState(emptyEventForm);
   const [editError, setEditError] = useState('');
   const [editSaving, setEditSaving] = useState(false);
@@ -32,9 +33,12 @@ function EventManager() {
   const [discardRequest, setDiscardRequest] = useState(null);
   const editButtonRefs = useRef({});
   const createButtonRef = useRef(null);
+  const bulkButtonRef = useRef(null);
   const editTitleRef = useRef(null);
+  const bulkTextRef = useRef(null);
   const focusAfterEditRef = useRef(null);
   const focusAfterCreateRef = useRef(false);
+  const focusAfterBulkRef = useRef(false);
   const dialogRef = useRef(null);
   const closeDialogRequestRef = useRef(null);
   const [search, setSearch] = useState('');
@@ -51,7 +55,7 @@ function EventManager() {
   const editIsDirty = Boolean(editing && JSON.stringify(editForm) !== JSON.stringify(eventFormFromRecord(editing)));
   const createIsDirty = Boolean(creating && JSON.stringify(form) !== JSON.stringify(emptyEventForm));
   const dialogIsDirty = editIsDirty || createIsDirty;
-  const dialogOpen = Boolean(editing || creating);
+  const dialogOpen = Boolean(editing || creating || bulkDialogOpen);
   const dialogForm = editing ? editForm : form;
   const setDialogForm = editing ? setEditForm : setForm;
   const dialogError = editing ? editError : createError;
@@ -69,7 +73,8 @@ function EventManager() {
 
   useEffect(() => {
     if (dialogOpen) {
-      editTitleRef.current?.focus();
+      if (bulkDialogOpen) bulkTextRef.current?.focus();
+      else editTitleRef.current?.focus();
     } else if (!saving && !editSaving) {
       if (focusAfterEditRef.current) {
         editButtonRefs.current[focusAfterEditRef.current]?.focus();
@@ -77,9 +82,12 @@ function EventManager() {
       } else if (focusAfterCreateRef.current) {
         createButtonRef.current?.focus();
         focusAfterCreateRef.current = false;
+      } else if (focusAfterBulkRef.current) {
+        bulkButtonRef.current?.focus();
+        focusAfterBulkRef.current = false;
       }
     }
-  }, [dialogOpen, editing?._id, creating, saving, editSaving]);
+  }, [dialogOpen, editing?._id, creating, bulkDialogOpen, saving, editSaving]);
 
   useEffect(() => {
     if (!dialogOpen) return undefined;
@@ -220,8 +228,15 @@ function EventManager() {
     setCreating(true);
   };
 
+  const openBulkDialog = () => setBulkDialogOpen(true);
+
   const requestCloseDialog = () => {
-    if (saving || editSaving) return;
+    if (saving || editSaving || bulkLoading) return;
+    if (bulkDialogOpen) {
+      setBulkDialogOpen(false);
+      focusAfterBulkRef.current = true;
+      return;
+    }
     if (dialogIsDirty) {
       setDiscardRequest({ nextEvent: null });
       return;
@@ -428,6 +443,17 @@ function EventManager() {
             + Create event
           </button>
           <button
+            ref={bulkButtonRef}
+            type="button"
+            onClick={openBulkDialog}
+            aria-haspopup="dialog"
+            aria-expanded={bulkDialogOpen}
+            aria-controls="bulk-event-dialog"
+            className="inline-flex min-h-11 items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-bold text-emerald-800 transition hover:bg-emerald-100"
+          >
+            Bulk import
+          </button>
+          <button
             type="button"
             onClick={load}
             disabled={loading}
@@ -462,57 +488,7 @@ function EventManager() {
         ))}
       </div>}
 
-      <div className="mt-8 grid gap-6 xl:grid-cols-[0.8fr_1.2fr]">
-        <div className="rounded-[1.75rem] border border-slate-200 bg-slate-50 p-5 shadow-sm">
-          <div className="mt-8 rounded-[1.5rem] border border-slate-200 bg-white p-4 shadow-sm">
-            <h3 className="text-lg font-black text-slate-900">Bulk event import</h3>
-            <p className="mt-2 text-sm leading-6 text-slate-600">
-              CSV columns: title, date, description, location, status, coverImage. Use YYYY-MM-DDTHH:mm for dates and Upcoming or Completed for status; times are interpreted in Africa/Lagos. Valid rows are saved even when other rows fail, and each skipped row is reported.
-            </p>
-
-            <button
-              type="button"
-              onClick={downloadCsvTemplate}
-              className="mt-3 inline-flex min-h-10 items-center justify-center rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-bold text-indigo-700 transition hover:bg-indigo-100"
-            >
-              Download CSV template
-            </button>
-
-            <textarea
-              value={bulkText}
-              onChange={(e) => setBulkText(e.target.value)}
-              disabled={bulkLoading || editSaving}
-              rows={8}
-              className="mt-4 w-full resize-none rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700 outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100"
-              placeholder={'JSON: [{"title":"Seminar","date":"2026-07-15T10:00","description":"...","location":"St. Mary"}]\nCSV: title,date,description,location,status,coverImage'}
-            />
-
-            {bulkError && <StatusNotice type="error" className="mt-3">{bulkError}</StatusNotice>}
-            {bulkSummary && <p role="status" className="mt-3 text-sm font-semibold text-slate-700">{bulkSummary}</p>}
-            {bulkErrors.length > 0 && (
-              <div className="mt-3 max-h-48 overflow-auto rounded-xl border border-rose-200 bg-rose-50 p-3" role="alert">
-                <p className="text-sm font-bold text-rose-800">Rows not imported</p>
-                <ul className="mt-2 list-inside list-disc space-y-1 text-xs text-rose-700">
-                  {bulkErrors.map((error, index) => (
-                    <li key={`${error.row}-${error.field}-${index}`}>
-                      Row {error.row}{error.field ? ` (${error.field})` : ''}: {error.message}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            <button
-              type="button"
-              onClick={handleBulkImport}
-              disabled={bulkLoading || editSaving}
-              className="mt-4 inline-flex items-center justify-center rounded-full bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-70"
-            >
-              {bulkLoading ? 'Importing…' : 'Import event batch'}
-            </button>
-          </div>
-        </div>
-
+      <div className="mt-8">
         <div className="rounded-[1.75rem] border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3 pb-4">
             <div>
@@ -638,14 +614,97 @@ function EventManager() {
         >
           <section
             ref={dialogRef}
-            id={editing ? `event-editor-${editing._id}` : 'create-event-dialog'}
+            id={bulkDialogOpen ? 'bulk-event-dialog' : editing ? `event-editor-${editing._id}` : 'create-event-dialog'}
             role="dialog"
             aria-modal="true"
-            aria-labelledby="event-dialog-title"
-            aria-describedby="event-dialog-description"
+            aria-labelledby={bulkDialogOpen ? 'bulk-dialog-title' : 'event-dialog-title'}
+            aria-describedby={bulkDialogOpen ? 'bulk-dialog-description' : 'event-dialog-description'}
             tabIndex={-1}
             className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-3xl border border-slate-200 bg-white shadow-2xl outline-none"
           >
+            {bulkDialogOpen ? (
+              <>
+                <header className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-slate-100 bg-white/95 px-5 py-4 backdrop-blur sm:px-7">
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-emerald-700">Event Manager</p>
+                    <h3 id="bulk-dialog-title" className="mt-1 text-xl font-black text-slate-900 sm:text-2xl">Bulk event import</h3>
+                    <p id="bulk-dialog-description" className="mt-1 text-xs text-slate-500">Paste a CSV or JSON event batch, then review any row-level errors.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={requestCloseDialog}
+                    disabled={bulkLoading}
+                    aria-label="Close bulk import dialog"
+                    className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-full border border-slate-200 text-lg text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    ×
+                  </button>
+                </header>
+
+                <div className="space-y-4 p-5 sm:p-7">
+                  <p className="text-sm leading-6 text-slate-600">
+                    CSV columns: title, date, description, location, status, coverImage. Use YYYY-MM-DDTHH:mm for dates and Upcoming or Completed for status; times are interpreted in Africa/Lagos. Valid rows are saved even when other rows fail, and each skipped row is reported.
+                  </p>
+
+                  <button
+                    type="button"
+                    onClick={downloadCsvTemplate}
+                    className="inline-flex min-h-10 items-center justify-center rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-bold text-indigo-700 transition hover:bg-indigo-100"
+                  >
+                    Download CSV template
+                  </button>
+
+                  <label htmlFor="bulk-event-data" className="block text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
+                    Event data
+                  </label>
+                  <textarea
+                    ref={bulkTextRef}
+                    id="bulk-event-data"
+                    value={bulkText}
+                    onChange={(event) => setBulkText(event.target.value)}
+                    disabled={bulkLoading}
+                    rows={10}
+                    className="w-full resize-y rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700 outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100"
+                    placeholder={'JSON: [{"title":"Seminar","date":"2026-07-15T10:00","description":"...","location":"St. Mary"}]\nCSV: title,date,description,location,status,coverImage'}
+                  />
+
+                  {bulkError && <StatusNotice type="error">{bulkError}</StatusNotice>}
+                  {bulkSummary && <p role="status" className="text-sm font-semibold text-slate-700">{bulkSummary}</p>}
+                  {bulkErrors.length > 0 && (
+                    <div className="max-h-48 overflow-auto rounded-xl border border-rose-200 bg-rose-50 p-3" role="alert">
+                      <p className="text-sm font-bold text-rose-800">Rows not imported</p>
+                      <ul className="mt-2 list-inside list-disc space-y-1 text-xs text-rose-700">
+                        {bulkErrors.map((error, index) => (
+                          <li key={`${error.row}-${error.field}-${index}`}>
+                            Row {error.row}{error.field ? ` (${error.field})` : ''}: {error.message}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  <div className="flex flex-col-reverse gap-3 border-t border-slate-100 pt-4 sm:flex-row sm:justify-end">
+                    <button
+                      type="button"
+                      onClick={requestCloseDialog}
+                      disabled={bulkLoading}
+                      className="inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      Close
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleBulkImport}
+                      disabled={bulkLoading}
+                      className="inline-flex min-h-11 items-center justify-center rounded-xl bg-emerald-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {bulkLoading ? 'Importing…' : 'Import event batch'}
+                    </button>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
             <header className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-slate-100 bg-white/95 px-5 py-4 backdrop-blur sm:px-7">
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-indigo-600">Event Manager</p>
@@ -749,6 +808,8 @@ function EventManager() {
                 </button>
               </div>
             </form>
+              </>
+            )}
           </section>
         </div>
       )}
