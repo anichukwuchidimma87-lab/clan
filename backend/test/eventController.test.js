@@ -6,7 +6,8 @@ import { createEvent, updateEvent } from '../src/controllers/eventController.js'
 import {
   getPublicBirthdays,
   getUpcomingBirthdays,
-  getBirthdayWhatsAppDraft
+  getBirthdayWhatsAppDraft,
+  updateLector
 } from '../src/controllers/lectorController.js';
 
 const makeResponse = () => ({
@@ -270,4 +271,56 @@ test('upcoming birthday endpoint rejects members', async () => {
   } finally {
     Lector.find = originalFind;
   }
+});
+
+test('parish president can update own-parish lector birth date without parish fields', async () => {
+  const originalFindById = Lector.findById;
+  const originalFindByIdAndUpdate = Lector.findByIdAndUpdate;
+  const target = { parishName: 'St. Anne Parish', dateOfBirth: null };
+  let updatedFields;
+  Lector.findById = async () => target;
+  Lector.findByIdAndUpdate = (id, fields) => {
+    updatedFields = fields;
+    return {
+      async populate() {
+        return { ...target, ...fields };
+      }
+    };
+  };
+
+  try {
+    const response = makeResponse();
+    await updateLector({
+      params: { id: 'lector-id' },
+      user: {
+        role: 'president',
+        parish: 'St. Anne Parish',
+        permissions: { update: true }
+      },
+      body: { dateOfBirth: '1992-02-29' }
+    }, response);
+
+    assert.equal(response.statusCode, 200);
+    assert.ok(updatedFields.dateOfBirth instanceof Date);
+    assert.equal(updatedFields.parishId, undefined);
+    assert.equal(updatedFields.deanery, undefined);
+  } finally {
+    Lector.findById = originalFindById;
+    Lector.findByIdAndUpdate = originalFindByIdAndUpdate;
+  }
+});
+
+test('parish president cannot transfer a lector by changing parish fields', async () => {
+  const response = makeResponse();
+  await updateLector({
+    params: { id: 'lector-id' },
+    user: {
+      role: 'president',
+      parish: 'St. Anne Parish',
+      permissions: { update: true }
+    },
+    body: { parishId: 'other-parish-id', dateOfBirth: '1992-02-29' }
+  }, response);
+
+  assert.equal(response.statusCode, 403);
 });

@@ -309,7 +309,8 @@ export default function RegistryManagement() {
   const handleAddMember = async (e) => {
     e.preventDefault();
     if (saveInProgressRef.current) return;
-    if (!formState.firstName || !formState.lastName || !formState.parishId) {
+    const editing = Boolean(editingMember?._id);
+    if (!formState.firstName || !formState.lastName || (!editing && !formState.parishId)) {
       setAlertMessage({ type: 'error', text: 'Please fill all required member fields.' });
       return;
     }
@@ -319,10 +320,13 @@ export default function RegistryManagement() {
     try {
       const body = {
         ...formState,
-        parishId: formState.parishId,
         deanery: 'Benin'
       };
-      const editing = Boolean(editingMember?._id);
+      if (!editing || !isPresident) body.parishId = formState.parishId;
+      else {
+        delete body.parishId;
+        delete body.deanery;
+      }
       if (editing && !editingMember.dateOfBirth && !formState.dateOfBirth) {
         delete body.dateOfBirth;
       }
@@ -2061,11 +2065,20 @@ export default function RegistryManagement() {
                 </label>
                 <div>
                   <label className="text-slate-500 block mb-1">Parish</label>
-                  <select value={formState.parishId} onChange={e => setFormState(prev => ({ ...prev, parishId: e.target.value }))} className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3" required>
-                    {parishes.map(parish => (
-                      <option key={parish._id} value={parish._id}>{parish.name}</option>
-                    ))}
-                  </select>
+                  {isPresident && editingMember ? (
+                    <input
+                      type="text"
+                      value={payload?.parish || editingMember.parish?.name || editingMember.parishName || ''}
+                      className="w-full rounded-2xl border border-slate-200 bg-slate-100 px-4 py-3 text-slate-600"
+                      disabled
+                    />
+                  ) : (
+                    <select value={formState.parishId} onChange={e => setFormState(prev => ({ ...prev, parishId: e.target.value }))} className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3" required>
+                      {parishes.map(parish => (
+                        <option key={parish._id} value={parish._id}>{parish.name}</option>
+                      ))}
+                    </select>
+                  )}
                 </div>
                 <div>
                   <label className="text-slate-500 block mb-1">Role in Parish</label>
