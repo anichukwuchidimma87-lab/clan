@@ -3,6 +3,7 @@ import {
   publicCheckIn, 
   addLector,
   getUpcomingBirthdays,
+  getBirthdayWhatsAppDraft,
   getPublicBirthdays,
   getRegistryData, 
   updateLector, 
@@ -22,6 +23,7 @@ router.post('/checkin', publicCheckIn);
 // Secure executive registry paths (Protected by your protect middleware)
 router.get('/registry', protect, getRegistryData);
 router.get('/birthdays', protect, getUpcomingBirthdays);
+router.get('/birthdays/:lectorId/whatsapp-draft', protect, getBirthdayWhatsAppDraft);
 router.get('/public-birthdays', getPublicBirthdays);
 router.post('/registry', protect, requirePermission('add'), addLector);
 router.post('/parishes/bulk-upload', protect, bulkUploadParishes);

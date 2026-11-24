@@ -60,8 +60,8 @@ test('public birthday serialization excludes identifier, birth year, and full da
     dateOfBirth: new Date(Date.UTC(1992, 1, 29))
   });
 
-  assert.deepEqual(birthday, { name: 'Ada Lector', month: 2, day: 29 });
-  assert.equal(Object.keys(birthday).some((key) => /year|date|id|parish/i.test(key)), false);
+  assert.deepEqual(birthday, { name: 'Ada Lector', parishName: 'Private Parish', month: 2, day: 29 });
+  assert.equal(Object.keys(birthday).some((key) => /year|date|id/i.test(key)), false);
 });
 
 test('February 29 birthdays are observed on March 1 in non-leap years', () => {

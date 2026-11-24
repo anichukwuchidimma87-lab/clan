@@ -16,10 +16,7 @@ export default function Users() {
   const [approvalParishes, setApprovalParishes] = useState({});
   const [activeTab, setActiveTab] = useState('pending');
   const [searchQuery, setSearchQuery] = useState('');
-  const [roleDialog, setRoleDialog] = useState(null);
-  const [roleDialogError, setRoleDialogError] = useState('');
   const [approvingUserId, setApprovingUserId] = useState(null);
-  const [updatingRole, setUpdatingRole] = useState(false);
   const [accountDialog, setAccountDialog] = useState(null);
   const [accountDialogError, setAccountDialogError] = useState('');
   const [updatingAccount, setUpdatingAccount] = useState(false);
@@ -113,32 +110,6 @@ export default function Users() {
     }
   };
 
-  const updateRole = async (nextRole, parish, permissions) => {
-    if (!roleDialog || updatingRole) return;
-
-    setUpdatingRole(true);
-    try {
-      const response = await axios.patch(
-        `${apiBase}/api/v1/users/${roleDialog.user._id}/role`,
-        { role: nextRole, parish, permissions },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-
-      setUsers((current) => current.map((item) =>
-        item._id === roleDialog.user._id
-          ? response.data?.user || { ...item, role: nextRole, parish, permissions }
-          : item
-      ));
-      setMessage({ text: 'User access updated successfully.', isError: false });
-      setRoleDialog(null);
-      setRoleDialogError('');
-    } catch (error) {
-      setRoleDialogError(error.response?.data?.message || 'Role update failed. You may lack sufficient clearance.');
-    } finally {
-      setUpdatingRole(false);
-    }
-  };
-
   const saveAccount = async (event) => {
     event.preventDefault();
     if (!accountDialog || updatingAccount) return;
@@ -147,7 +118,10 @@ export default function Users() {
     try {
       const payload = {
         email: accountDialog.email,
-        status: accountDialog.status
+        status: accountDialog.status,
+        role: accountDialog.role,
+        parish: accountDialog.parish,
+        permissions: accountDialog.permissions
       };
       if (accountDialog.password) payload.password = accountDialog.password;
 
@@ -166,22 +140,6 @@ export default function Users() {
     } finally {
       setUpdatingAccount(false);
     }
-  };
-
-  const openRoleDialog = (user, role, parish, permissions) => {
-    setRoleDialogError('');
-    setRoleDialog({
-      user,
-      role,
-      parish: parish || '',
-      permissions: { ...(user.permissions || {}), ...(permissions || {}) }
-    });
-  };
-
-  const confirmRoleChange = () => {
-    if (!roleDialog || updatingRole) return;
-    if (roleDialog.role === 'president' && !roleDialog.parish) return;
-    updateRole(roleDialog.role, roleDialog.parish, roleDialog.permissions);
   };
 
   const filteredPendingUsers = useMemo(() => {
@@ -324,51 +282,10 @@ export default function Users() {
                     <p className="text-lg font-black text-slate-900">{user.name}</p>
                     <p className="mt-1 text-sm text-slate-500">{user.email}</p>
                     <p className="mt-2 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">
-                      {user.position || 'Member'} · {user.status || 'approved'}
+                      {user.role || 'member'}{user.parish ? ` · ${user.parish}` : ''} · {user.status || 'approved'}
                     </p>
                   </div>
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
-                    <select
-                      value={user.role || 'member'}
-                      onChange={(event) => openRoleDialog(user, event.target.value, user.parish || '', user.permissions || {})}
-                      className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700"
-                    >
-                      {roleOptions.map((role) => (
-                        <option key={role} value={role}>{role}</option>
-                      ))}
-                    </select>
-
-                    {user.role === 'president' && (
-                      <>
-                        <select
-                          value={user.parish || ''}
-                          onChange={(event) => openRoleDialog(user, 'president', event.target.value, user.permissions || {})}
-                          className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700"
-                        >
-                          <option value="">Select parish</option>
-                          {parishes.map((parish) => (
-                            <option key={parish._id} value={parish.name}>{parish.name}</option>
-                          ))}
-                        </select>
-                        <div className="grid grid-cols-2 gap-2">
-                          {permissionOptions.map((permission) => (
-                            <label key={permission} className="flex items-center gap-2 text-xs capitalize text-slate-600">
-                              <input
-                                type="checkbox"
-                                checked={Boolean(user.permissions?.[permission])}
-                                onChange={(event) => openRoleDialog(
-                                  user,
-                                  'president',
-                                  user.parish || '',
-                                  { ...user.permissions, [permission]: event.target.checked }
-                                )}
-                              />
-                              {permission}
-                            </label>
-                          ))}
-                        </div>
-                      </>
-                    )}
                     {user._id !== actorId && <button
                       type="button"
                       onClick={() => {
@@ -377,7 +294,10 @@ export default function Users() {
                           user,
                           email: user.email || '',
                           password: '',
-                          status: user.status || 'approved'
+                          status: user.status || 'approved',
+                          role: user.role || 'member',
+                          parish: user.parish || '',
+                          permissions: { ...(user.permissions || {}) }
                         });
                       }}
                       className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
@@ -391,41 +311,6 @@ export default function Users() {
           </section>
         )}
 
-        {roleDialog && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4" role="dialog" aria-modal="true" aria-labelledby="role-dialog-title">
-            <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl">
-              <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-indigo-600">Confirm access change</p>
-              <h2 id="role-dialog-title" className="mt-2 text-xl font-black text-slate-900">
-                Change {roleDialog.user.name}&apos;s access?
-              </h2>
-              <div className="mt-4 space-y-2 rounded-2xl bg-slate-50 p-4 text-sm">
-                <p><span className="text-slate-500">Role:</span> <strong className="ml-2 text-slate-900">{roleDialog.role}</strong></p>
-                {roleDialog.role === 'president' && (
-                  <p><span className="text-slate-500">Parish:</span> <strong className="ml-2 text-slate-900">{roleDialog.parish || 'Not selected'}</strong></p>
-                )}
-              </div>
-              {roleDialog.role === 'president' && !roleDialog.parish && (
-                <p role="alert" className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
-                  Select a parish before confirming this role change.
-                </p>
-              )}
-              {roleDialogError && <StatusNotice type="error" className="mt-3">{roleDialogError}</StatusNotice>}
-              <div className="mt-6 flex justify-end gap-3">
-                <button type="button" onClick={() => setRoleDialog(null)} disabled={updatingRole} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-60">
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={confirmRoleChange}
-                  disabled={updatingRole || (roleDialog.role === 'president' && !roleDialog.parish)}
-                  className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {updatingRole ? 'Saving...' : 'Confirm change'}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
         {accountDialog && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4" role="dialog" aria-modal="true" aria-labelledby="account-dialog-title">
             <form onSubmit={saveAccount} className="w-full max-w-md space-y-4 rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl">
@@ -443,6 +328,48 @@ export default function Users() {
                   className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-800"
                 />
               </label>
+              <label className="block text-xs font-bold text-slate-600">
+                Access role
+                <select
+                  value={accountDialog.role}
+                  onChange={(event) => setAccountDialog((current) => ({ ...current, role: event.target.value }))}
+                  className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium capitalize text-slate-800"
+                >
+                  {roleOptions.map((role) => <option key={role} value={role}>{role}</option>)}
+                </select>
+              </label>
+              {['member', 'president'].includes(accountDialog.role) && (
+                <label className="block text-xs font-bold text-slate-600">
+                  Parish {accountDialog.role === 'president' ? '(required)' : ''}
+                  <select
+                    value={accountDialog.parish}
+                    required={accountDialog.role === 'president'}
+                    onChange={(event) => setAccountDialog((current) => ({ ...current, parish: event.target.value }))}
+                    className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-800"
+                  >
+                    <option value="">Select parish</option>
+                    {parishes.map((parish) => <option key={parish._id} value={parish.name}>{parish.name}</option>)}
+                  </select>
+                </label>
+              )}
+              {accountDialog.role === 'president' && (
+                <fieldset className="grid grid-cols-2 gap-2">
+                  <legend className="mb-2 text-xs font-bold text-slate-600">Parish permissions</legend>
+                  {permissionOptions.map((permission) => (
+                    <label key={permission} className="flex items-center gap-2 text-xs capitalize text-slate-600">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(accountDialog.permissions?.[permission])}
+                        onChange={(event) => setAccountDialog((current) => ({
+                          ...current,
+                          permissions: { ...current.permissions, [permission]: event.target.checked }
+                        }))}
+                      />
+                      {permission}
+                    </label>
+                  ))}
+                </fieldset>
+              )}
               <label className="block text-xs font-bold text-slate-600">
                 Set a new password
                 <input

@@ -10,7 +10,8 @@ const getUser = () => {
     return {
       name: [payload.title, payload.firstName, payload.lastName].filter(Boolean).join(' ') || payload.name || 'Account',
       parish: payload.parish || '',
-      role: String(payload.role || 'member').toLowerCase()
+      role: String(payload.role || 'member').toLowerCase(),
+      permissions: payload.permissions || {}
     };
   } catch {
     return null;
@@ -37,6 +38,7 @@ export default function WorkspaceLayout() {
   const isExecutive = ['executive', 'superadmin'].includes(role);
   const canAccessRegistry = ['executive', 'superadmin', 'president'].includes(role);
   const canAccessLedger = ['executive', 'superadmin', 'president'].includes(role);
+  const canAccessBirthdays = ['executive', 'superadmin'].includes(role) || (role === 'president' && user?.permissions?.view);
 
   useEffect(() => {
     setMobileOpen(false);
@@ -64,6 +66,7 @@ export default function WorkspaceLayout() {
         {canAccessRegistry && <NavLink to="/registry" className={linkClass}><NavMark>RG</NavMark><span>{role === 'president' ? 'Parish roster' : 'Registry'}</span></NavLink>}
         {canAccessLedger && <NavLink to="/ledger" className={linkClass}><NavMark>FL</NavMark><span>Financial ledger</span></NavLink>}
         <NavLink to="/events" className={linkClass}><NavMark>EV</NavMark><span>Community calendar</span></NavLink>
+        {canAccessBirthdays && <NavLink to="/birthdays" className={linkClass}><NavMark>BD</NavMark><span>Birthdays</span></NavLink>}
         <NavLink to="/profile" className={linkClass}><NavMark>ME</NavMark><span>My profile</span></NavLink>
 
         {isExecutive && (

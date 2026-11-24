@@ -763,8 +763,10 @@ export default function EventCalendar() {
 
               {(selectedDate ? birthdayMap.get(selectedDate) || [] : []).map((birthday) => (
                 <article key={`${birthday.month}-${birthday.day}-${birthday.name}`} className="rounded-2xl border border-pink-200 bg-pink-50 p-3">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-pink-700">Community birthday</p>
-                  <p className="mt-2 text-sm font-bold text-slate-900">{birthday.name}</p>
+                  <p className="text-sm font-bold leading-6 text-slate-900">
+                    Join us in wishing {birthday.name} a happy birthday! May the year ahead bring joy and blessings.
+                  </p>
+                  <p className="mt-2 text-xs font-semibold text-slate-700">Parish: {birthday.parishName || 'Not listed'}</p>
                   <p className="mt-1 text-xs text-slate-600">{formatBirthdayMonthDay(birthday.month, birthday.day)} · Birthday</p>
                 </article>
               ))}
@@ -777,7 +779,6 @@ export default function EventCalendar() {
               {selectedDate && !loading && !error && !(eventMap.get(selectedDate) || []).length && !(birthdayMap.get(selectedDate) || []).length && (
                 <p className="text-sm text-slate-500">No events are scheduled for this date.</p>
               )}
-              {publicBirthdays.length > 0 && <p className="text-[11px] leading-5 text-slate-500">Birthday dates repeat yearly. February 29 birthdays are observed on March 1 in non-leap years.</p>}
             </div>
           </div>
         </div>

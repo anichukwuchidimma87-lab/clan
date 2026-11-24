@@ -27,6 +27,14 @@ const buildDisplayName = ({ title = '', firstName = '', middleName = '', lastNam
   return fullName || 'Executive Member';
 };
 
+const getParishName = async (parish) => {
+  const parishName = String(parish || '').trim();
+  if (!parishName) return '';
+
+  const parishRecord = await Parish.findOne({ name: parishName }).select('name').lean();
+  return parishRecord?.name || null;
+};
+
 export const getPendingUsers = async (req, res) => {
   try {
     const pendingUsers = await User.find({ status: 'pending' }).select('-password').sort({ name: 1 });
@@ -148,10 +156,11 @@ export const updateUserRole = async (req, res) => {
       return res.status(404).json({ success: false, message: 'User not found.' });
     }
 
-    const normalizedRole = normalizeUserRole(role);
+    const requestedRole = String(role || '').trim().toLowerCase();
+    const normalizedRole = normalizeUserRole(requestedRole);
     const allowedRoles = ['superadmin', 'executive', 'president', 'member'];
 
-    if (!allowedRoles.includes(normalizedRole)) {
+    if (!allowedRoles.includes(requestedRole) && requestedRole !== 'admin') {
       return res.status(400).json({ success: false, message: 'Invalid role selected.' });
     }
     if (req.user.role !== 'superadmin' && (targetUser.role === 'superadmin' || normalizedRole === 'superadmin')) {
@@ -163,11 +172,22 @@ export const updateUserRole = async (req, res) => {
         return res.status(400).json({ success: false, message: 'The last approved superadmin cannot be demoted.' });
       }
     }
-    targetUser.role = normalizedRole;
+    let assignedParish = '';
     if (normalizedRole === 'president') {
-      const parishRecord = await Parish.findOne({ name: String(parish || '').trim() }).select('name').lean();
-      if (!parishRecord) return res.status(400).json({ success: false, message: 'Select a parish from the master parish directory.' });
-      targetUser.parish = parishRecord.name;
+      assignedParish = await getParishName(parish);
+      if (!assignedParish) return res.status(400).json({ success: false, message: 'Select a parish from the master parish directory.' });
+    } else if (normalizedRole === 'member') {
+      assignedParish = parish === undefined
+        ? targetUser.parish || ''
+        : await getParishName(parish);
+      if (assignedParish === null) {
+        return res.status(400).json({ success: false, message: 'Select a parish from the master parish directory.' });
+      }
+    }
+
+    targetUser.role = normalizedRole;
+    targetUser.parish = assignedParish;
+    if (normalizedRole === 'president') {
       targetUser.permissions = {
         view: permissions?.view ?? targetUser.permissions?.view ?? true,
         export: permissions?.export ?? targetUser.permissions?.export ?? true,
@@ -177,7 +197,7 @@ export const updateUserRole = async (req, res) => {
         delete: permissions?.delete ?? targetUser.permissions?.delete ?? false
       };
     } else {
-      targetUser.parish = '';
+      if (normalizedRole !== 'member') targetUser.parish = '';
       targetUser.permissions = {
         view: false,
         export: false,
@@ -237,11 +257,67 @@ export const updateUserAccount = async (req, res) => {
       return res.status(403).json({ success: false, message: 'Only a superadmin may manage a superadmin account.' });
     }
 
-    const { email, password, status } = req.body;
+    const { email, password, status, role, parish, permissions } = req.body;
     const changes = [];
 
-    if (String(user._id) === String(req.user._id) && status === 'disabled') {
-      return res.status(400).json({ success: false, message: 'You cannot disable your own account.' });
+    if (role !== undefined) {
+      const requestedRole = String(role || '').trim().toLowerCase();
+      const allowedRoles = ['superadmin', 'executive', 'president', 'member'];
+      if (!allowedRoles.includes(requestedRole) && requestedRole !== 'admin') {
+        return res.status(400).json({ success: false, message: 'Invalid role selected.' });
+      }
+      const normalizedRole = normalizeUserRole(requestedRole);
+      if (req.user.role !== 'superadmin' && (user.role === 'superadmin' || normalizedRole === 'superadmin')) {
+        return res.status(403).json({ success: false, message: 'Only a superadmin may change a superadmin account.' });
+      }
+      if (user.role === 'superadmin' && normalizedRole !== 'superadmin') {
+        const activeSuperadmins = await User.countDocuments({ role: 'superadmin', status: 'approved' });
+        if (activeSuperadmins <= 1) {
+          return res.status(400).json({ success: false, message: 'The last approved superadmin cannot be demoted.' });
+        }
+      }
+
+      let assignedParish = '';
+      if (normalizedRole === 'president') {
+        assignedParish = await getParishName(parish);
+        if (!assignedParish) {
+          return res.status(400).json({ success: false, message: 'Select a parish from the master parish directory.' });
+        }
+      } else if (normalizedRole === 'member') {
+        assignedParish = await getParishName(parish);
+        if (assignedParish === null) {
+          return res.status(400).json({ success: false, message: 'Select a parish from the master parish directory.' });
+        }
+      }
+
+      if (user.role !== normalizedRole) {
+        user.role = normalizedRole;
+        changes.push(`role set to ${normalizedRole}`);
+      }
+      if ((user.parish || '') !== assignedParish) {
+        user.parish = assignedParish;
+        changes.push(`parish set to ${assignedParish || 'unassigned'}`);
+      }
+
+      const permissionKeys = ['view', 'export', 'add', 'update', 'suspend', 'delete'];
+      if (permissions !== undefined && (
+        !permissions ||
+        typeof permissions !== 'object' ||
+        Array.isArray(permissions) ||
+        permissionKeys.some((key) => permissions[key] !== undefined && typeof permissions[key] !== 'boolean')
+      )) {
+        return res.status(400).json({ success: false, message: 'Role permissions must be boolean values.' });
+      }
+      const nextPermissions = normalizedRole === 'president'
+        ? Object.fromEntries(permissionKeys.map((key) => [
+          key,
+          permissions?.[key] ?? user.permissions?.[key] ?? ['view', 'export', 'update'].includes(key)
+        ]))
+        : Object.fromEntries(permissionKeys.map((key) => [key, false]));
+      if (permissionKeys.some((key) => Boolean(user.permissions?.[key]) !== nextPermissions[key])) {
+        user.permissions = nextPermissions;
+        changes.push('permissions updated');
+      }
     }
 
     if (email !== undefined) {
@@ -275,6 +351,9 @@ export const updateUserAccount = async (req, res) => {
     if (status !== undefined) {
       if (!['approved', 'disabled'].includes(status)) {
         return res.status(400).json({ success: false, message: 'Account status must be approved or disabled.' });
+      }
+      if (String(user._id) === String(req.user._id) && status === 'disabled') {
+        return res.status(400).json({ success: false, message: 'You cannot disable your own account.' });
       }
       if (user.role === 'superadmin' && status !== 'approved') {
         const activeSuperadmins = await User.countDocuments({ role: 'superadmin', status: 'approved' });
@@ -580,8 +659,12 @@ export const updateUserProfile = async (req, res) => {
     if (phone !== undefined) {
       user.phone = phone ? String(phone).trim() : '';
     }
-    if (parish !== undefined && isAdmin) {
-      user.parish = parish ? String(parish).trim() : '';
+    if (parish !== undefined && (isAdmin || (isSelf && normalizeUserRole(user.role) === 'member'))) {
+      const parishName = await getParishName(parish);
+      if (parishName === null) {
+        return res.status(400).json({ success: false, message: 'Select a parish from the master parish directory.' });
+      }
+      user.parish = parishName;
     }
     if (executiveSessionStart !== undefined) {
       const start = String(executiveSessionStart).trim();

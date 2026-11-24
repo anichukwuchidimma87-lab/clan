@@ -82,6 +82,7 @@ export default function Profile() {
   }, []);
 
   const handleChange = (field, value) => setForm((current) => ({ ...current, [field]: value }));
+  const canEditParish = ['member', 'executive', 'superadmin', 'admin'].includes(String(user?.role || '').toLowerCase());
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -222,7 +223,16 @@ export default function Profile() {
                 <div className="grid gap-4 sm:grid-cols-2">
                   <Field label="Email address"><input type="email" value={form.email} onChange={(event) => handleChange('email', event.target.value)} className={inputClass} required /></Field>
                   <Field label="Phone number"><input value={form.phone} onChange={(event) => handleChange('phone', event.target.value)} className={inputClass} placeholder="Optional" /></Field>
-                  <Field label="Parish"><select value={form.parish} onChange={(event) => handleChange('parish', event.target.value)} className={inputClass}><option value="">Select parish</option>{parishes.map((parish) => <option key={parish} value={parish}>{parish}</option>)}</select></Field>
+                  <Field label="Parish">
+                    {canEditParish ? (
+                      <select value={form.parish} onChange={(event) => handleChange('parish', event.target.value)} className={inputClass}>
+                        <option value="">Select parish</option>
+                        {parishes.map((parish) => <option key={parish} value={parish}>{parish}</option>)}
+                      </select>
+                    ) : (
+                      <input value={form.parish || 'Managed by administration'} className={`${inputClass} bg-slate-100`} disabled />
+                    )}
+                  </Field>
                   <Field label="Access role"><input value={roleLabel} className={`${inputClass} bg-slate-100 capitalize`} disabled /></Field>
                 </div>
               </section>

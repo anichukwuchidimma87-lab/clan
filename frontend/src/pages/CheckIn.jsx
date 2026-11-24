@@ -192,7 +192,7 @@ export default function CheckIn() {
                 className="mt-1 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
               />
               <span>
-                I agree to have my name and birthday month/day shown on the public CLAN event calendar. My birth year and full date of birth will not be displayed.
+                I agree to have my name, parish, and birthday month/day shown on the public CLAN event calendar. My birth year and full date of birth will not be displayed.
               </span>
             </label>
 

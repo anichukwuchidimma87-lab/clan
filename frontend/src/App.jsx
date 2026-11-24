@@ -26,6 +26,7 @@ const AdminControl = lazy(() => import('./pages/AdminControl'));
 const AdminContent = lazy(() => import('./pages/AdminContent'));
 const Profile = lazy(() => import('./pages/Profile'));
 const Settings = lazy(() => import('./pages/Settings'));
+const Birthdays = lazy(() => import('./pages/Birthdays'));
 
 const getStoredRole = () => {
   const token = localStorage.getItem('clan_token');
@@ -67,7 +68,7 @@ function App() {
 
 function AppRoutes() {
   const location = useLocation();
-  const isWorkspaceRoute = /^\/(dashboard|profile|ledger|registry(?:\/|$)|users|settings|admin(?:\/|$))/.test(location.pathname);
+  const isWorkspaceRoute = /^\/(dashboard|profile|ledger|registry(?:\/|$)|users|settings|birthdays|admin(?:\/|$))/.test(location.pathname);
   const hasToken = Boolean(localStorage.getItem('clan_token'));
 
   return (
@@ -86,6 +87,7 @@ function AppRoutes() {
         <Route element={<WorkspaceLayout />}>
           <Route path="/dashboard" element={<LazyPage component={Dashboard} />} />
           <Route path="/profile" element={<LazyPage component={Profile} />} />
+          <Route path="/birthdays" element={<RoleGate allow={['superadmin', 'executive', 'president']}><LazyPage component={Birthdays} /></RoleGate>} />
           <Route path="/settings" element={<RoleGate allow={['superadmin', 'executive']}><LazyPage component={Settings} /></RoleGate>} />
           <Route path="/ledger" element={<RoleGate allow={['superadmin', 'executive', 'president']}><LazyPage component={FinancialLedger} /></RoleGate>} />
           <Route path="/ledger/parishes/:parishId" element={<RoleGate allow={['superadmin', 'executive', 'president']}><LazyPage component={ParishLedgerDetails} /></RoleGate>} />

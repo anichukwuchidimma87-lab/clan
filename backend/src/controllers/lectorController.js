@@ -1,5 +1,6 @@
 import Lector from '../models/Lector.js';
 import Parish from '../models/Parish.js';
+import mongoose from 'mongoose';
 import Finance from '../models/Finance.js';
 import FeeType from '../models/FeeType.js';
 import FeeTarget from '../models/FeeTarget.js';
@@ -10,6 +11,37 @@ import {
   parseBirthDate,
   serializePublicBirthday
 } from '../../../shared/eventTools.js';
+
+const getBirthdayAccess = (req, res) => {
+  const { role, parish } = req.user;
+  if (!['superadmin', 'executive', 'president'].includes(role)) {
+    res.status(403).json({ success: false, message: 'Not authorized to view birthdays.' });
+    return null;
+  }
+  if (role === 'president' && !req.user.permissions?.view) {
+    res.status(403).json({ success: false, message: 'View permission was not granted.' });
+    return null;
+  }
+
+  return {
+    role,
+    filter: role === 'president'
+      ? { parishName: parish, deanery: 'Benin' }
+      : { deanery: 'Benin' }
+  };
+};
+
+const normalizeWhatsAppPhone = (phone) => {
+  const value = String(phone || '').trim();
+  if (!/^\+?[\d\s().-]+$/.test(value)) return null;
+
+  let digits = value.replace(/\D/g, '');
+  if (digits.startsWith('00')) digits = digits.slice(2);
+  if (digits.startsWith('0')) digits = `234${digits.slice(1)}`;
+  else if (digits.startsWith('2340')) digits = `234${digits.slice(4)}`;
+
+  return /^\d{8,15}$/.test(digits) && !digits.startsWith('0') ? digits : null;
+};
 
 // HELPER PUBLIC ENDPOINT: Feeds the dynamic check-in page dropdown safely from master registry records
 export const getActiveParishList = async (req, res) => {
@@ -234,30 +266,27 @@ export const addLector = async (req, res) => {
 
 export const getUpcomingBirthdays = async (req, res) => {
   try {
-    const { role, parish } = req.user;
-    if (!['superadmin', 'executive', 'president'].includes(role)) {
-      return res.status(403).json({ success: false, message: 'Not authorized to view birthdays.' });
-    }
-    if (role === 'president' && !req.user.permissions?.view) {
-      return res.status(403).json({ success: false, message: 'View permission was not granted.' });
-    }
+    const access = getBirthdayAccess(req, res);
+    if (!access) return;
 
     const days = Math.min(366, Math.max(1, parseInt(req.query.days, 10) || 30));
-    const filter = role === 'president' ? { parishName: parish } : {};
     const lectors = await Lector.find({
-      ...filter,
+      ...access.filter,
+      status: 'Active',
       dateOfBirth: { $ne: null }
-    }).select('firstName lastName parishName dateOfBirth');
+    }).select('firstName lastName parishName dateOfBirth phone');
 
     const birthdays = lectors.map((lector) => {
       const { month, day } = serializePublicBirthday(lector);
       const occurrence = getNextBirthdayOccurrence(month, day);
       return {
+        id: String(lector._id),
         name: `${lector.firstName} ${lector.lastName}`,
         parishName: lector.parishName,
         month,
         day,
-        daysUntil: occurrence.daysUntil
+        daysUntil: occurrence.daysUntil,
+        hasPhone: Boolean(normalizeWhatsAppPhone(lector.phone))
       };
     })
       .filter((item) => item.daysUntil <= days)
@@ -269,13 +298,51 @@ export const getUpcomingBirthdays = async (req, res) => {
   }
 };
 
+export const getBirthdayWhatsAppDraft = async (req, res) => {
+  try {
+    const access = getBirthdayAccess(req, res);
+    if (!access) return;
+    if (!mongoose.isValidObjectId(req.params.lectorId)) {
+      return res.status(400).json({ success: false, message: 'Invalid birthday record.' });
+    }
+
+    const lector = await Lector.findOne({
+      _id: req.params.lectorId,
+      ...access.filter,
+      status: 'Active',
+      dateOfBirth: { $ne: null }
+    }).select('firstName lastName parishName phone dateOfBirth').lean();
+    if (!lector) {
+      return res.status(404).json({ success: false, message: 'Birthday record not found in your authorized community.' });
+    }
+
+    const phone = normalizeWhatsAppPhone(lector.phone);
+    if (!phone) {
+      return res.status(400).json({ success: false, message: 'A valid international phone number is not available for this person.' });
+    }
+
+    const name = `${lector.firstName || ''} ${lector.lastName || ''}`.trim();
+    const message = access.role === 'president'
+      ? `Happy birthday, ${name}! Wishing you a joyful and blessed year ahead. Warm wishes from your parish family at ${lector.parishName}.`
+      : `Happy birthday, ${name}! Wishing you a joyful and blessed year ahead. Warm wishes from your deanery family.`;
+
+    return res.status(200).json({
+      success: true,
+      url: `https://wa.me/${phone}?text=${encodeURIComponent(message)}`
+    });
+  } catch (error) {
+    console.error('Error preparing birthday WhatsApp draft:', error);
+    return res.status(500).json({ success: false, message: 'Unable to prepare the birthday message.' });
+  }
+};
+
 export const getPublicBirthdays = async (req, res) => {
   try {
     const lectors = await Lector.find({
       status: 'Active',
       publicBirthdayConsent: true,
       dateOfBirth: { $ne: null }
-    }).select('firstName lastName dateOfBirth').lean();
+    }).select('firstName lastName parishName dateOfBirth').lean();
 
     const birthdays = lectors
       .map(serializePublicBirthday)

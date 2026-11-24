@@ -246,6 +246,7 @@ export function serializePublicBirthday(lector) {
   const { month, day } = getBirthdayParts(lector.dateOfBirth);
   return {
     name: `${lector.firstName || ''} ${lector.lastName || ''}`.trim(),
+    parishName: lector.parishName || '',
     month,
     day
   };
