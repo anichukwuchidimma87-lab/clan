@@ -494,7 +494,6 @@ export const getRegistryData = async (req, res) => {
       };
       const totalCount = await Lector.countDocuments(filter);
       const ownParishLectors = await Lector.find(filter)
-        .select('-dateOfBirth')
         .populate('parish', 'name zone')
         .sort({ lastName: 1, firstName: 1 })
         .skip((page - 1) * limit)

@@ -7,6 +7,7 @@ import {
   getPublicBirthdays,
   getUpcomingBirthdays,
   getBirthdayWhatsAppDraft,
+  getRegistryData,
   updateLector
 } from '../src/controllers/lectorController.js';
 
@@ -270,6 +271,55 @@ test('upcoming birthday endpoint rejects members', async () => {
     assert.equal(response.statusCode, 403);
   } finally {
     Lector.find = originalFind;
+  }
+});
+
+test('parish president registry records include date of birth for details and editing', async () => {
+  const originals = {
+    countDocuments: Lector.countDocuments,
+    find: Lector.find
+  };
+  const dateOfBirth = new Date('1992-02-29T00:00:00.000Z');
+  const lector = { _id: 'lector-id', dateOfBirth };
+  let selectedFields;
+
+  Lector.countDocuments = async () => 1;
+  Lector.find = () => ({
+    select(fields) {
+      selectedFields = fields;
+      return this;
+    },
+    populate() {
+      return this;
+    },
+    sort() {
+      return this;
+    },
+    skip() {
+      return this;
+    },
+    async limit() {
+      return [lector];
+    }
+  });
+
+  try {
+    const response = makeResponse();
+    await getRegistryData({
+      user: {
+        role: 'president',
+        parish: 'St. Anne Parish',
+        permissions: { view: true }
+      },
+      query: { limit: '1000', page: '1' }
+    }, response);
+
+    assert.equal(response.statusCode, 200);
+    assert.notEqual(selectedFields, '-dateOfBirth');
+    assert.equal(response.body.ownParish[0].dateOfBirth, dateOfBirth);
+  } finally {
+    Lector.countDocuments = originals.countDocuments;
+    Lector.find = originals.find;
   }
 });
 

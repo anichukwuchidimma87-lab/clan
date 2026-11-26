@@ -4,6 +4,7 @@ import ParishHealthRing from '../components/ParishHealthRing';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
+import { compareLectorsByRole, formatDateOfBirth } from '../../../shared/registryTools.js';
 
 export default function RegistryManagement() {
   const navigate = useNavigate();
@@ -49,7 +50,7 @@ export default function RegistryManagement() {
   const [parishStatusFilter, setParishStatusFilter] = useState(['all', 'active', 'inactive'].includes(searchParams.get('parishStatus')) ? searchParams.get('parishStatus') : 'all');
   const [roleFilter, setRoleFilter] = useState(searchParams.get('role') || 'all');
   const [statusFilter, setStatusFilter] = useState(['all', 'Active', 'Suspended'].includes(searchParams.get('status')) ? searchParams.get('status') : 'all');
-  const [sortBy, setSortBy] = useState(['name', 'parish', 'lastName', 'recent', 'status', 'members', 'inactive'].includes(initialSort) ? initialSort : 'name');
+  const [sortBy, setSortBy] = useState(['name', 'parish', 'lastName', 'recent', 'status', 'role', 'members', 'inactive'].includes(initialSort) ? initialSort : 'name');
   const [parishReviewOpen, setParishReviewOpen] = useState(false);
   const [parishReviewTarget, setParishReviewTarget] = useState(null);
   const [deaneryTargets, setDeaneryTargets] = useState({});
@@ -897,6 +898,9 @@ export default function RegistryManagement() {
       case 'lastName':
         list.sort((a, b) => `${a.lastName || ''}`.localeCompare(`${b.lastName || ''}`));
         break;
+      case 'role':
+        list.sort(compareLectorsByRole);
+        break;
       case 'name':
       default:
         list.sort((a, b) => `${a.firstName || ''} ${a.lastName || ''}`.localeCompare(`${b.firstName || ''} ${b.lastName || ''}`));
@@ -1276,6 +1280,7 @@ export default function RegistryManagement() {
                   <option value="lastName">Sort: Last Name</option>
                   <option value="recent">Sort: Recent</option>
                   <option value="status">Sort: Status</option>
+                  {activeTab === 'lectors' && <option value="role">Sort: Parish Role</option>}
                   {activeTab === 'parishes' && <option value="members">Sort: Members</option>}
                   {activeTab === 'parishes' && <option value="inactive">Sort: Activity</option>}
                 </select>
@@ -1942,7 +1947,7 @@ export default function RegistryManagement() {
                         <p><strong>Role:</strong> {selectedMember.roleInParish || 'Member'}</p>
                         <p><strong>Parish:</strong> {(selectedMember.parish && selectedMember.parish.name) || selectedMember.parishName || 'Unassigned'}</p>
                         <p><strong>Gender:</strong> {selectedMember.gender || 'N/A'}</p>
-                        <p><strong>Date of Birth:</strong> {selectedMember.dateOfBirth ? new Date(selectedMember.dateOfBirth).toLocaleDateString() : 'N/A'}</p>
+                        <p><strong>Date of Birth:</strong> {formatDateOfBirth(selectedMember.dateOfBirth) || 'N/A'}</p>
                         <p><strong>Public birthday display:</strong> {selectedMember.publicBirthdayConsent === true ? 'Consent recorded' : 'Not opted in'}</p>
                         <p><strong>Year Commissioned:</strong> {selectedMember.yearCommissioned || 'N/A'}</p>
                       </div>

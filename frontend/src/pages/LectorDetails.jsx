@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { formatDateOfBirth } from '../../../shared/registryTools.js';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'https://clan-3slh.onrender.com';
 
@@ -115,7 +116,7 @@ export default function LectorDetails() {
               <Detail label="Phone" value={member.phone || 'Not provided'} />
               <Detail label="Gender" value={member.gender || 'Not provided'} />
               <Detail label="Age bracket" value={member.ageBracket || 'Not provided'} />
-              <Detail label="Date of birth" value={member.dateOfBirth ? new Date(member.dateOfBirth).toLocaleDateString() : 'Not provided'} />
+              <Detail label="Date of birth" value={formatDateOfBirth(member.dateOfBirth) || 'Not provided'} />
             </dl>
           </div>
 
